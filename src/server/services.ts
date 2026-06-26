@@ -46,7 +46,7 @@ export class AuthService {
     return { user, ...tokens };
   }
 
-  async login(firebaseToken: string, ipAddress?: string, userAgent?: string) {
+  async login(firebaseToken: string, ipAddress?: string, userAgent?: string, role?: UserRole) {
     const decoded = await this.verifyFirebaseToken(firebaseToken);
     let user = await this.userRepo.findByFirebaseUid(decoded.uid);
 
@@ -55,12 +55,14 @@ export class AuthService {
         email: decoded.email || '',
         name: decoded.name || decoded.email?.split('@')[0] || 'User',
         firebaseUid: decoded.uid,
-        role: 'citizen' as UserRole,
+        role: (role || 'citizen') as UserRole,
         avatar: decoded.picture,
         issuesReported: 0, issuesResolved: 0,
         isActive: true, isBanned: false,
         preferences: { notifications: true, emailAlerts: true, pushAlerts: true },
       } as Omit<IUser, 'id' | 'createdAt' | 'updatedAt'>);
+    } else if (role && user.role !== role) {
+      user = await this.userRepo.update(user.id, { role } as any) as IUser;
     }
 
     if (user.isBanned) throw AppError.forbidden(`Account banned: ${user.banReason || 'Contact support'}`);
@@ -206,6 +208,23 @@ export class IssueService {
   async getIssue(issueId: string): Promise<IIssue> {
     const issue = await this.issueRepo.findById(issueId);
     if (!issue) throw AppError.notFound('Issue');
+    if (issue.reportedBy && typeof issue.reportedBy === 'string') {
+      const reporter = await this.userRepo.findById(issue.reportedBy);
+      if (reporter) {
+        (issue as any).reportedBy = {
+          id: reporter.id,
+          name: reporter.name,
+          avatar: reporter.avatar,
+          issuesReported: reporter.issuesReported || 0,
+        };
+      } else {
+        (issue as any).reportedBy = {
+          id: issue.reportedBy,
+          name: issue.reportedByName || 'Anonymous User',
+          issuesReported: 0,
+        };
+      }
+    }
     return issue;
   }
 
@@ -248,7 +267,28 @@ export class IssueService {
   }
 
   async listIssues(filters: IIssueFilter, page = 1, limit = 20, sortBy = 'createdAt', sortOrder: 'asc' | 'desc' = 'desc') {
-    return this.issueRepo.findWithFilters(filters, limit, (page - 1) * limit, sortBy, sortOrder as FirebaseFirestore.OrderByDirection);
+    const result = await this.issueRepo.findWithFilters(filters, limit, (page - 1) * limit, sortBy, sortOrder as FirebaseFirestore.OrderByDirection);
+    const populatedDocs = await Promise.all(result.data.map(async (issue) => {
+      if (issue.reportedBy && typeof issue.reportedBy === 'string') {
+        const reporter = await this.userRepo.findById(issue.reportedBy);
+        if (reporter) {
+          (issue as any).reportedBy = {
+            id: reporter.id,
+            name: reporter.name,
+            avatar: reporter.avatar,
+            issuesReported: reporter.issuesReported || 0,
+          };
+        } else {
+          (issue as any).reportedBy = {
+            id: issue.reportedBy,
+            name: issue.reportedByName || 'Anonymous User',
+            issuesReported: 0,
+          };
+        }
+      }
+      return issue;
+    }));
+    return { data: populatedDocs, total: result.total };
   }
 
   async getNearbyIssues(lat: number, lng: number, radiusKm = 5) {

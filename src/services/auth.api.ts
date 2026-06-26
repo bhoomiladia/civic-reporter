@@ -16,11 +16,11 @@ export interface AuthResponse {
 
 export const authApi = {
   // Google sign in sequence
-  loginWithGoogle: async (): Promise<AuthResponse> => {
+  loginWithGoogle: async (role?: string): Promise<AuthResponse> => {
     const userCredential = await signInWithPopup(clientAuth, googleProvider);
     const idToken = await userCredential.user.getIdToken();
     
-    const response = await api.post('/auth/login', { firebaseToken: idToken });
+    const response = await api.post('/auth/login', { firebaseToken: idToken, role });
     const data = response.data.data;
     setTokens(data.accessToken, data.refreshToken);
     return data;

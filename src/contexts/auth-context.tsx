@@ -14,7 +14,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  loginWithGoogle: () => Promise<void>;
+  loginWithGoogle: (role?: string) => Promise<void>;
   registerUser: (name: string, email: string, role: string, phone?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -60,10 +60,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const loginWithGoogle = async () => {
+  const loginWithGoogle = async (role?: string) => {
     setIsLoading(true);
     try {
-      const data = await authApi.loginWithGoogle();
+      const data = await authApi.loginWithGoogle(role);
       setUser(data.user);
     } catch (error) {
       console.error("Google authentication failed:", error);

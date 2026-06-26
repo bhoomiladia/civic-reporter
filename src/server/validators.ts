@@ -30,6 +30,7 @@ export const registerSchema = z.object({
 
 export const loginSchema = z.object({
   firebaseToken: z.string().min(1, 'Firebase token is required'),
+  role: z.enum(['citizen', 'municipality', 'worker', 'admin']).optional(),
 });
 
 export const refreshTokenSchema = z.object({
@@ -44,6 +45,7 @@ export const updateProfileSchema = z.object({
   name: z.string().min(2).max(100).optional(),
   displayName: z.string().min(2).max(100).optional(),
   phone: z.string().max(20).optional(),
+  role: z.enum(['citizen', 'municipality', 'worker', 'admin']).optional(),
   preferences: z.object({
     notifications: z.boolean().optional(),
     emailAlerts: z.boolean().optional(),

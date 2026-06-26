@@ -1,8 +1,8 @@
 import { api } from './api';
 
 export const dashboardApi = {
-  getDashboardData: async (type?: string) => {
-    const response = await api.get('/dashboard', { params: type ? { type } : undefined });
+  getDashboardData: async (category?: string) => {
+    const response = await api.get('/dashboard', { params: category ? { category } : undefined });
     return response.data.data;
   },
 

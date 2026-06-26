@@ -12,8 +12,10 @@ import {
   Users,
   BarChart3,
   Settings,
+  Shield,
 } from "lucide-react";
 import { Logo } from "@/components/shared/logo";
+import { useAuth } from "@/contexts/auth-context";
 
 const sidebarItems = [
   { id: "home", label: "Home", href: "/", icon: Home },
@@ -27,6 +29,12 @@ const sidebarItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const { user } = useAuth();
+
+  const items = [
+    ...sidebarItems,
+    ...(user?.role === 'admin' ? [{ id: "admin", label: "Admin", href: "/admin", icon: Shield }] : [])
+  ];
 
   return (
     <aside
@@ -47,7 +55,7 @@ export function Sidebar() {
 
       {/* Navigation Icons Dock */}
       <nav className="flex-1 flex flex-col items-center justify-center gap-2 w-full px-2">
-        {sidebarItems.map((item) => {
+        {items.map((item) => {
           const isActive =
             item.href === "/"
               ? pathname === "/"

@@ -9,12 +9,12 @@ const authService = new AuthService();
  */
 export const POST = withErrorHandler(async (request) => {
   const body = await request.json();
-  const { firebaseToken } = validateBody(loginSchema, body);
+  const { firebaseToken, role } = validateBody(loginSchema, body);
 
   const ip = request.headers.get('x-forwarded-for') || undefined;
   const ua = request.headers.get('user-agent') || undefined;
 
-  const result = await authService.login(firebaseToken, ip, ua);
+  const result = await authService.login(firebaseToken, ip, ua, role);
 
   return successResponse({
     user: result.user,

@@ -130,9 +130,18 @@ export class UserRepository extends BaseRepository<IUser> {
   }
 
   async getTopContributors(limit = 10): Promise<IUser[]> {
-    const snap = await this.collection
-      .where('isActive', '==', true).orderBy('issuesReported', 'desc').limit(limit).get();
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as IUser));
+    try {
+      const snap = await this.collection
+        .where('isActive', '==', true).orderBy('issuesReported', 'desc').limit(limit).get();
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as IUser));
+    } catch (e) {
+      console.warn("Index missing for getTopContributors, falling back to in-memory filtering");
+      const snap = await this.collection.where('isActive', '==', true).get();
+      const users = snap.docs.map((d) => ({ id: d.id, ...d.data() } as IUser));
+      return users
+        .sort((a, b) => (b.issuesReported || 0) - (a.issuesReported || 0))
+        .slice(0, limit);
+    }
   }
 
   async updateLoginTimestamp(id: string) {
