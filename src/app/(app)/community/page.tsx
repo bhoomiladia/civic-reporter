@@ -1,47 +1,53 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { formatTimeAgo } from "@/lib/utils";
+import { formatTimeAgo, formatDate } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CategoryIcon, StatusBadge } from "@/components/shared/status-badge";
-import { mockIssues, mockUsers, mockStats } from "@/lib/mock-data";
+import { useCommunityOverview, usePublicStats } from "@/hooks/use-community";
+import { useIssues } from "@/hooks/use-issues";
+import Link from "next/link";
 import {
   Trophy,
-  TrendingUp,
   CheckCircle2,
-  ArrowUp,
-  MessageCircle,
   Star,
   Users,
   BarChart3,
   Target,
+  TrendingUp,
+  Loader2,
 } from "lucide-react";
 
 export default function CommunityPage() {
-  /* Recent resolutions */
-  const recentResolved = mockIssues
-    .filter((i) => i.status === "resolved")
-    .slice(0, 3);
+  const { data: overview, isLoading: overviewLoading } = useCommunityOverview();
+  const { data: publicStats, isLoading: statsLoading } = usePublicStats();
+  const { data: recentIssuesResp, isLoading: issuesLoading } = useIssues({ limit: 10 });
 
-  /* Top contributors sorted by issues reported */
-  const topContributors = [...mockUsers]
-    .sort((a, b) => b.issuesReported - a.issuesReported)
-    .slice(0, 5);
+  const recentResolved = overview?.recentlyResolved || [];
+  const topContributors = overview?.topContributors || [];
+  const recentIssues = recentIssuesResp?.data || [];
 
-  /* Recent activity feed */
-  const recentActivity = mockIssues
-    .flatMap((issue) =>
-      issue.timeline.map((event) => ({
-        ...event,
-        issueId: issue.id,
-        issueTitle: issue.title,
-        category: issue.category,
-      }))
-    )
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-    .slice(0, 8);
+  const stats = publicStats || {
+    activeReporters: 0,
+    issuesResolvedThisMonth: 0,
+    resolutionRate: 0,
+    averageResponseTime: "N/A",
+  };
+
+  const isLoading = overviewLoading || statsLoading || issuesLoading;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-surface-secondary">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-2" />
+          <p className="text-body text-gray-500">Loading community insights...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-56px)] lg:min-h-screen bg-surface-secondary">
@@ -63,25 +69,25 @@ export default function CommunityPage() {
               <Users size={20} />
             </div>
             <div className="text-h2 text-gray-900 mb-0.5">
-              {mockStats.activeReporters}
+              {stats.activeReporters || stats.totalCitizens || 0}
             </div>
-            <div className="text-small text-gray-500">Active Reporters</div>
+            <div className="text-small text-gray-500">Active Citizens</div>
           </Card>
           <Card padding="md" className="text-center">
             <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center text-green-600 mx-auto mb-3">
               <CheckCircle2 size={20} />
             </div>
             <div className="text-h2 text-gray-900 mb-0.5">
-              {mockStats.issuesResolvedThisMonth}
+              {stats.issuesResolved || stats.resolvedCount || 0}
             </div>
-            <div className="text-small text-gray-500">Resolved This Month</div>
+            <div className="text-small text-gray-500">Total Resolved</div>
           </Card>
           <Card padding="md" className="text-center">
             <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 mx-auto mb-3">
               <Target size={20} />
             </div>
             <div className="text-h2 text-gray-900 mb-0.5">
-              {mockStats.resolutionRate}%
+              {stats.resolutionRate || 0}%
             </div>
             <div className="text-small text-gray-500">Resolution Rate</div>
           </Card>
@@ -89,10 +95,10 @@ export default function CommunityPage() {
             <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 mx-auto mb-3">
               <TrendingUp size={20} />
             </div>
-            <div className="text-h2 text-gray-900 mb-0.5">
-              {mockStats.averageResponseTime}
+            <div className="text-h2 text-gray-900 mb-0.5 truncate max-w-[120px] mx-auto">
+              {stats.avgResponseTime || '2 days'}
             </div>
-            <div className="text-small text-gray-500">Avg. Response</div>
+            <div className="text-small text-gray-500">Avg. Response Time</div>
           </Card>
         </div>
 
@@ -105,30 +111,34 @@ export default function CommunityPage() {
             </h2>
             <Card padding="none">
               <div className="divide-y divide-gray-100">
-                {recentActivity.map((event, i) => (
-                  <div
-                    key={`${event.id}-${i}`}
-                    className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
-                  >
-                    <CategoryIcon
-                      category={event.category}
-                      size={14}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-small text-gray-900">
-                        <span className="font-medium">
-                          {event.description}
-                        </span>
-                      </p>
-                      <p className="text-[12px] text-gray-400 mt-0.5 truncate">
-                        {event.issueTitle}
-                      </p>
+                {recentIssues.length === 0 ? (
+                  <p className="text-small text-gray-400 p-4 text-center">No recent activity.</p>
+                ) : (
+                  recentIssues.map((issue: any) => (
+                    <div
+                      key={issue.id}
+                      className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                    >
+                      <CategoryIcon
+                        category={issue.category}
+                        size={14}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-small text-gray-900">
+                          <span className="font-medium">
+                            New issue reported: {issue.title}
+                          </span>
+                        </p>
+                        <p className="text-[12px] text-gray-400 mt-0.5 truncate">
+                          {issue.location.address}
+                        </p>
+                      </div>
+                      <span className="text-[12px] text-gray-400 shrink-0">
+                        {formatTimeAgo(issue.reportedAt)}
+                      </span>
                     </div>
-                    <span className="text-[12px] text-gray-400 shrink-0">
-                      {formatTimeAgo(event.createdAt)}
-                    </span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </Card>
           </div>
@@ -143,44 +153,48 @@ export default function CommunityPage() {
               </h2>
               <Card padding="none">
                 <div className="divide-y divide-gray-100">
-                  {topContributors.map((user, i) => (
-                    <div
-                      key={user.id}
-                      className="flex items-center gap-3 px-4 py-3"
-                    >
-                      <span
-                        className={cn(
-                          "w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0",
-                          i === 0
-                            ? "bg-amber-100 text-amber-700"
-                            : i === 1
-                            ? "bg-gray-100 text-gray-600"
-                            : i === 2
-                            ? "bg-orange-50 text-orange-600"
-                            : "bg-gray-50 text-gray-400"
-                        )}
+                  {topContributors.length === 0 ? (
+                    <p className="text-small text-gray-400 p-4 text-center">No top contributors listed.</p>
+                  ) : (
+                    topContributors.map((user: any, i: number) => (
+                      <div
+                        key={user.id}
+                        className="flex items-center gap-3 px-4 py-3"
                       >
-                        {i + 1}
-                      </span>
-                      <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-semibold text-[12px] shrink-0">
-                        {user.name.charAt(0)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-small font-medium text-gray-900 truncate">
-                          {user.name}
+                        <span
+                          className={cn(
+                            "w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0",
+                            i === 0
+                              ? "bg-amber-100 text-amber-700"
+                              : i === 1
+                              ? "bg-gray-100 text-gray-600"
+                              : i === 2
+                              ? "bg-orange-50 text-orange-600"
+                              : "bg-gray-50 text-gray-400"
+                          )}
+                        >
+                          {i + 1}
+                        </span>
+                        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-semibold text-[12px] shrink-0">
+                          {user.name ? user.name.charAt(0) : "U"}
                         </div>
-                        <div className="text-[12px] text-gray-400">
-                          {user.issuesReported} reports
+                        <div className="flex-1 min-w-0">
+                          <div className="text-small font-medium text-gray-900 truncate">
+                            {user.name || "User"}
+                          </div>
+                          <div className="text-[12px] text-gray-400">
+                            {user.issuesReported || 0} reports
+                          </div>
                         </div>
+                        {i === 0 && (
+                          <Star
+                            size={14}
+                            className="text-amber-400 fill-amber-400"
+                          />
+                        )}
                       </div>
-                      {i === 0 && (
-                        <Star
-                          size={14}
-                          className="text-amber-400 fill-amber-400"
-                        />
-                      )}
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </Card>
             </div>
@@ -192,21 +206,27 @@ export default function CommunityPage() {
                 Recently Resolved
               </h2>
               <div className="space-y-2">
-                {recentResolved.map((issue) => (
-                  <Card key={issue.id} hover padding="sm">
-                    <div className="flex items-center gap-2.5">
-                      <CategoryIcon category={issue.category} size={14} />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-small font-medium text-gray-900 truncate">
-                          {issue.title}
+                {recentResolved.length === 0 ? (
+                  <p className="text-small text-gray-400 text-center py-4 bg-white border border-gray-200 rounded-xl">No resolved issues yet.</p>
+                ) : (
+                  recentResolved.map((issue: any) => (
+                    <Link href={`/issues/${issue.id}`} key={issue.id}>
+                      <Card hover padding="sm" className="mb-2 block cursor-pointer">
+                        <div className="flex items-center gap-2.5">
+                          <CategoryIcon category={issue.category} size={14} />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-small font-medium text-gray-900 truncate">
+                              {issue.title}
+                            </div>
+                            <div className="text-[12px] text-gray-400">
+                              {issue.location.neighborhood || issue.location.address}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-[12px] text-gray-400">
-                          {issue.location.neighborhood || issue.location.address}
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
+                      </Card>
+                    </Link>
+                  ))
+                )}
               </div>
             </div>
           </div>

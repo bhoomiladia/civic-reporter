@@ -2,16 +2,16 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { MapPlaceholder } from "@/components/map/map-placeholder";
-import { MapControls, FloatingActionButton } from "@/components/map/map-controls";
+import { LiveMapWrapper } from "@/components/map/live-map-wrapper";
+import { FloatingActionButton } from "@/components/map/map-controls";
 import { IssueCard } from "@/components/issues/issue-card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { mockIssues } from "@/lib/mock-data";
 import { CATEGORIES } from "@/lib/constants";
 import { useIsMobile } from "@/hooks/use-media-query";
+import { useIssues } from "@/hooks/use-issues";
 import type { Issue, IssueCategory } from "@/lib/types";
-import { Search, X, SlidersHorizontal, ChevronUp, GripHorizontal } from "lucide-react";
+import { Search, X, SlidersHorizontal, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 export default function MapPage() {
@@ -21,20 +21,13 @@ export default function MapPage() {
   const [sheetExpanded, setSheetExpanded] = useState(false);
   const isMobile = useIsMobile();
 
-  const filteredIssues = mockIssues.filter((issue) => {
-    if (selectedCategories.length > 0 && !selectedCategories.includes(issue.category)) {
-      return false;
-    }
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return (
-        issue.title.toLowerCase().includes(q) ||
-        issue.location.address.toLowerCase().includes(q) ||
-        issue.location.neighborhood?.toLowerCase().includes(q)
-      );
-    }
-    return true;
+  // Resolve issues from real backend instead of mockIssues array
+  const { data: response, isLoading } = useIssues({
+    category: selectedCategories.join(','),
+    q: searchQuery || undefined,
   });
+
+  const issuesList = response?.data || [];
 
   const toggleCategory = (cat: IssueCategory) => {
     setSelectedCategories((prev) =>
@@ -46,14 +39,12 @@ export default function MapPage() {
     <div className="relative h-[calc(100vh-0px)] lg:h-screen overflow-hidden">
       {/* Map */}
       <div className="absolute inset-0">
-        <MapPlaceholder
+        <LiveMapWrapper
+          issuesList={issuesList}
           onPinClick={setSelectedIssue}
           selectedIssueId={selectedIssue?.id}
         />
       </div>
-
-      {/* Map Controls — right side */}
-      <MapControls className="absolute right-3 top-3 sm:right-4 sm:top-4 z-20" />
 
       {/* Desktop Side Panel */}
       <div className="hidden lg:flex flex-col absolute left-0 top-0 bottom-0 w-[380px] z-10 bg-white/95 backdrop-blur-sm border-r border-gray-200">
@@ -102,24 +93,31 @@ export default function MapPage() {
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           <div className="flex items-center justify-between px-1 mb-1">
             <span className="text-small text-gray-500">
-              {filteredIssues.length} issues
+              {issuesList.length} issues
             </span>
             <button className="text-small text-gray-400 hover:text-gray-600 flex items-center gap-1 cursor-pointer">
               <SlidersHorizontal size={14} />
               Filter
             </button>
           </div>
-          {filteredIssues.map((issue) => (
-            <div
-              key={issue.id}
-              onClick={() => setSelectedIssue(issue)}
-              className={cn(
-                selectedIssue?.id === issue.id && "ring-2 ring-blue-600 rounded-xl"
-              )}
-            >
-              <IssueCard issue={issue} />
+          
+          {isLoading ? (
+            <div className="flex justify-center items-center py-10">
+              <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
             </div>
-          ))}
+          ) : (
+            issuesList.map((issue: any) => (
+              <div
+                key={issue.id}
+                onClick={() => setSelectedIssue(issue)}
+                className={cn(
+                  selectedIssue?.id === issue.id && "ring-2 ring-blue-600 rounded-xl"
+                )}
+              >
+                <IssueCard issue={issue} />
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -182,15 +180,21 @@ export default function MapPage() {
             sheetExpanded ? "max-h-[calc(100vh-280px)]" : "max-h-[60px]"
           )}
         >
-          {filteredIssues.slice(0, sheetExpanded ? undefined : 1).map((issue) => (
-            <IssueCard key={issue.id} issue={issue} compact />
-          ))}
-          {!sheetExpanded && filteredIssues.length > 1 && (
+          {isLoading ? (
+            <div className="flex justify-center py-2">
+              <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+            </div>
+          ) : (
+            issuesList.slice(0, sheetExpanded ? undefined : 1).map((issue: any) => (
+              <IssueCard key={issue.id} issue={issue} compact />
+            ))
+          )}
+          {!sheetExpanded && issuesList.length > 1 && (
             <button
               onClick={() => setSheetExpanded(true)}
               className="w-full text-center text-small text-blue-600 font-medium py-1 cursor-pointer"
             >
-              See {filteredIssues.length - 1} more issues
+              See {issuesList.length - 1} more issues
             </button>
           )}
         </div>

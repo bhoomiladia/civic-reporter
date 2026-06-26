@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { CATEGORIES } from "@/lib/constants";
+import { useCreateIssue } from "@/hooks/use-issues";
+import { uploadApi } from "@/services/upload.api";
+import { LocationPickerWrapper } from "@/components/map/location-picker-wrapper";
 import {
   ArrowLeft,
   ArrowRight,
@@ -24,6 +27,8 @@ import {
   Waves,
   Trees,
   MessageCircle,
+  Loader2,
+  Search,
 } from "lucide-react";
 import Link from "next/link";
 import type { IssueCategory } from "@/lib/types";
@@ -55,16 +60,72 @@ export default function ReportPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [address, setAddress] = useState("");
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [searchedLocation, setSearchedLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<Array<{ display_name: string; lat: string; lon: string }>>([]);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const createIssueMutation = useCreateIssue();
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      const file = files[0];
+      const uploadedUrl = await uploadApi.uploadFile(file);
+      setPhotos((prev) => [...prev, uploadedUrl]);
+    } catch (e) {
+      console.error("Failed to upload image:", e);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const triggerFileSelect = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAddressSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && address.trim()) {
+      setIsSearching(true);
+      setSearchResults([]);
+      try {
+        const res = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=" + encodeURIComponent(address));
+        const data = await res.json();
+        if (data && data.length > 0) {
+          setSearchResults(data);
+        }
+      } catch (err) {
+        console.error("Geocoding failed", err);
+      } finally {
+        setIsSearching(false);
+      }
+    }
+  };
+
+  const selectSearchResult = (result: { display_name: string; lat: string; lon: string }) => {
+    const lat = parseFloat(result.lat);
+    const lng = parseFloat(result.lon);
+    setLocation({ lat, lng });
+    setSearchedLocation({ lat, lng });
+    setAddress(result.display_name);
+    setSearchResults([]);
+  };
 
   const canProceed = () => {
     switch (currentStep) {
       case 1:
         return selectedCategory !== null;
       case 2:
-        return address.length > 0;
+        return location !== null && address.length > 0;
       case 3:
-        return title.length > 0;
+        return title.length > 0 && description.length >= 10;
       case 4:
         return true;
       default:
@@ -73,7 +134,31 @@ export default function ReportPage() {
   };
 
   const handleSubmit = () => {
-    setSubmitted(true);
+    if (!selectedCategory || !title || !description || !location || !address) return;
+    
+    // Construct request matching createIssueSchema Zod validation
+    const payload = {
+      title,
+      description,
+      category: selectedCategory,
+      priority: "medium", // default
+      location: {
+        lat: location.lat,
+        lng: location.lng,
+        address,
+        neighborhood: "",
+      },
+      photos,
+    };
+
+    createIssueMutation.mutate(payload, {
+      onSuccess: () => {
+        setSubmitted(true);
+      },
+      onError: (err) => {
+        console.error("Create issue failed:", err);
+      }
+    });
   };
 
   if (submitted) {
@@ -108,6 +193,15 @@ export default function ReportPage() {
 
   return (
     <div className="min-h-[calc(100vh-56px)] lg:min-h-screen bg-surface-secondary">
+      {/* Hidden file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileUpload}
+        accept="image/*"
+        className="hidden"
+      />
+
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
@@ -236,38 +330,43 @@ export default function ReportPage() {
             <p className="text-body text-gray-500 mb-6">
               Enter the address or pin a location on the map.
             </p>
-            <Input
-              placeholder="Enter address or intersection..."
-              icon={<MapPin size={16} />}
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              className="mb-4"
-            />
-            {/* Map picker placeholder */}
+            <div className="relative mb-4">
+              <Input
+                placeholder="Enter address or intersection... (Press Enter to search)"
+                icon={isSearching ? <Loader2 size={16} className="animate-spin text-gray-400" /> : <MapPin size={16} />}
+                value={address}
+                onChange={(e) => { setAddress(e.target.value); if (searchResults.length > 0) setSearchResults([]); }}
+                onKeyDown={handleAddressSearch}
+              />
+              {searchResults.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden max-h-[240px] overflow-y-auto">
+                  {searchResults.map((result, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => selectSearchResult(result)}
+                      className={cn(
+                        "w-full text-left px-4 py-3 flex items-start gap-3 cursor-pointer",
+                        "transition-colors hover:bg-blue-50",
+                        idx > 0 && "border-t border-gray-100"
+                      )}
+                    >
+                      <MapPin size={14} className="text-gray-400 mt-0.5 shrink-0" />
+                      <span className="text-sm text-gray-700 leading-snug line-clamp-2">{result.display_name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* Real Map Picker */}
             <Card padding="none" className="overflow-hidden h-[300px] sm:h-[400px]">
-              <div className="w-full h-full bg-[#f2efe9] flex items-center justify-center relative">
-                <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <defs>
-                    <pattern id="loc-grid" width="60" height="60" patternUnits="userSpaceOnUse">
-                      <path d="M 60 0 L 0 0 0 60" fill="none" stroke="#e8e4dd" strokeWidth="1" />
-                    </pattern>
-                  </defs>
-                  <rect width="100%" height="100%" fill="url(#loc-grid)" />
-                </svg>
-                {/* Center pin */}
-                <div className="relative z-10 flex flex-col items-center">
-                  <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center shadow-lg border-3 border-white">
-                    <MapPin size={20} className="text-white" />
-                  </div>
-                  <div className="w-1 h-3 bg-blue-600 -mt-1" />
-                  <div className="w-3 h-3 rounded-full bg-blue-600/20 -mt-0.5" />
-                </div>
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-gray-200">
-                  <span className="text-[12px] text-gray-600 font-medium">
-                    Tap to place pin
-                  </span>
-                </div>
-              </div>
+              <LocationPickerWrapper
+                position={location}
+                searchedLocation={searchedLocation}
+                onLocationSelect={(lat, lng, addr) => {
+                  setLocation({ lat, lng });
+                  setAddress(addr);
+                }}
+              />
             </Card>
           </div>
         )}
@@ -284,7 +383,7 @@ export default function ReportPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-small font-medium text-gray-700 mb-1.5">
-                  Title
+                  Title (min 5 chars)
                 </label>
                 <Input
                   placeholder="e.g., Large pothole on Main Street"
@@ -294,7 +393,7 @@ export default function ReportPage() {
               </div>
               <div>
                 <label className="block text-small font-medium text-gray-700 mb-1.5">
-                  Description
+                  Description (min 10 chars)
                 </label>
                 <textarea
                   placeholder="Describe the issue, its size, and any safety concerns..."
@@ -316,14 +415,26 @@ export default function ReportPage() {
                 <label className="block text-small font-medium text-gray-700 mb-1.5">
                   Photos (optional)
                 </label>
-                <div className="flex gap-3">
-                  <button className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 hover:border-gray-400 hover:text-gray-500 transition-colors cursor-pointer">
-                    <Camera size={20} />
-                    <span className="text-[10px] font-medium">Photo</span>
-                  </button>
-                  <button className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 hover:border-gray-400 hover:text-gray-500 transition-colors cursor-pointer">
-                    <Upload size={20} />
-                    <span className="text-[10px] font-medium">Upload</span>
+                <div className="flex flex-wrap gap-3">
+                  {photos.map((photoUrl, index) => (
+                    <div key={index} className="w-20 h-20 rounded-xl overflow-hidden border border-gray-200 bg-gray-50 relative">
+                      <img src={photoUrl} alt="Upload thumbnail" className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                  
+                  <button
+                    onClick={triggerFileSelect}
+                    disabled={isUploading}
+                    className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 hover:border-gray-400 hover:text-gray-500 transition-colors cursor-pointer"
+                  >
+                    {isUploading ? (
+                      <Loader2 size={20} className="animate-spin text-blue-600" />
+                    ) : (
+                      <>
+                        <Upload size={20} />
+                        <span className="text-[10px] font-medium">Upload</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -380,6 +491,21 @@ export default function ReportPage() {
                   </div>
                 </>
               )}
+              {photos.length > 0 && (
+                <>
+                  <div className="h-px bg-gray-100" />
+                  <div>
+                    <span className="text-tiny text-gray-400 block mb-1">
+                      Photos ({photos.length})
+                    </span>
+                    <div className="flex gap-2 mt-1">
+                      {photos.map((photoUrl, index) => (
+                        <img key={index} src={photoUrl} className="w-12 h-12 object-cover rounded-lg border border-gray-200" alt="Thumbnail" />
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </Card>
           </div>
         )}
@@ -404,8 +530,12 @@ export default function ReportPage() {
               <ArrowRight size={16} />
             </Button>
           ) : (
-            <Button onClick={handleSubmit}>
-              <Check size={16} />
+            <Button onClick={handleSubmit} disabled={createIssueMutation.isPending}>
+              {createIssueMutation.isPending ? (
+                <Loader2 size={16} className="animate-spin mr-1" />
+              ) : (
+                <Check size={16} />
+              )}
               Submit Report
             </Button>
           )}

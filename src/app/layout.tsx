@@ -33,6 +33,8 @@ export const viewport: Viewport = {
   themeColor: "#ffffff",
 };
 
+import { AppProviders } from "@/contexts/providers";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -43,7 +45,11 @@ export default function RootLayout({
       lang="en"
       className={`${instrumentSerif.variable} ${inter.variable}`}
     >
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased">
+        <AppProviders>
+          {children}
+        </AppProviders>
+      </body>
     </html>
   );
 }

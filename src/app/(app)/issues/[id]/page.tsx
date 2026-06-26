@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { formatDate, formatTimeAgo } from "@/lib/utils";
@@ -8,8 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CategoryIcon, StatusBadge } from "@/components/shared/status-badge";
-import { mockIssues } from "@/lib/mock-data";
-import { STATUS_CONFIG } from "@/lib/constants";
+import { useIssue, useVoteIssue, useAddComment, useVerifyIssue } from "@/hooks/use-issues";
 import {
   ArrowLeft,
   ArrowUp,
@@ -23,7 +22,7 @@ import {
   Circle,
   AlertCircle,
   Pencil,
-  CalendarDays,
+  Loader2,
 } from "lucide-react";
 
 const timelineIcons: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -40,9 +39,42 @@ export default function IssueDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const issue = mockIssues.find((i) => i.id === id);
+  const { data: issue, isLoading, error } = useIssue(id);
+  const voteMutation = useVoteIssue(id);
+  const commentMutation = useAddComment(id);
+  const verifyMutation = useVerifyIssue(id);
 
-  if (!issue) {
+  const [commentText, setCommentText] = useState("");
+
+  const handleVote = () => {
+    voteMutation.mutate('up');
+  };
+
+  const handleVerify = () => {
+    verifyMutation.mutate();
+  };
+
+  const handlePostComment = () => {
+    if (!commentText.trim()) return;
+    commentMutation.mutate(commentText, {
+      onSuccess: () => {
+        setCommentText("");
+      }
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-surface-secondary">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-2" />
+          <p className="text-body text-gray-500">Loading issue details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !issue) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="text-center">
@@ -60,6 +92,9 @@ export default function IssueDetailPage({
       </div>
     );
   }
+
+  const commentsList = issue.comments || [];
+  const timelineList = issue.timeline || [];
 
   return (
     <div className="min-h-[calc(100vh-56px)] lg:min-h-screen bg-surface-secondary">
@@ -106,11 +141,26 @@ export default function IssueDetailPage({
                 {issue.description}
               </p>
 
+              {/* Photos rendering */}
+              {issue.photos && issue.photos.length > 0 && (
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  {issue.photos.map((photoUrl: string, idx: number) => (
+                    <div key={idx} className="relative aspect-video rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+                      <img src={photoUrl} alt={`Issue attachment ${idx + 1}`} className="object-cover w-full h-full" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Actions */}
-              <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
-                <Button variant="outline" size="sm">
-                  <ArrowUp size={14} />
+              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
+                <Button variant="outline" size="sm" onClick={handleVote} disabled={voteMutation.isPending}>
+                  <ArrowUp size={14} className={cn(voteMutation.isPending && "animate-pulse")} />
                   Upvote · {issue.upvotes}
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleVerify} disabled={verifyMutation.isPending}>
+                  <CheckCircle2 size={14} />
+                  Verify ({(issue as any).verificationsCount || 0})
                 </Button>
                 <Button variant="ghost" size="sm">
                   <Share2 size={14} />
@@ -126,64 +176,68 @@ export default function IssueDetailPage({
             <Card padding="lg">
               <h2 className="text-h3 text-gray-900 mb-4">Timeline</h2>
               <div className="space-y-0">
-                {issue.timeline.map((event, i) => {
-                  const Icon = timelineIcons[event.type] || Circle;
-                  const isLast = i === issue.timeline.length - 1;
-                  const colorMap: Record<string, string> = {
-                    created: "text-blue-600 bg-blue-50",
-                    acknowledged: "text-purple-600 bg-purple-50",
-                    assigned: "text-amber-600 bg-amber-50",
-                    updated: "text-gray-600 bg-gray-100",
-                    resolved: "text-green-600 bg-green-50",
-                  };
-                  return (
-                    <div key={event.id} className="flex gap-3">
-                      <div className="flex flex-col items-center">
-                        <div
-                          className={cn(
-                            "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-                            colorMap[event.type] || "text-gray-400 bg-gray-100"
+                {timelineList.length === 0 ? (
+                  <p className="text-small text-gray-400">No events recorded yet.</p>
+                ) : (
+                  timelineList.map((event: any, i: number) => {
+                    const Icon = timelineIcons[event.type] || Circle;
+                    const isLast = i === timelineList.length - 1;
+                    const colorMap: Record<string, string> = {
+                      created: "text-blue-600 bg-blue-50",
+                      acknowledged: "text-purple-600 bg-purple-50",
+                      assigned: "text-amber-600 bg-amber-50",
+                      updated: "text-gray-600 bg-gray-100",
+                      resolved: "text-green-600 bg-green-50",
+                    };
+                    return (
+                      <div key={event.id} className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div
+                            className={cn(
+                              "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                              colorMap[event.type] || "text-gray-400 bg-gray-100"
+                            )}
+                          >
+                            <Icon size={14} />
+                          </div>
+                          {!isLast && (
+                            <div className="w-px h-full bg-gray-200 my-1 min-h-[24px]" />
                           )}
-                        >
-                          <Icon size={14} />
                         </div>
-                        {!isLast && (
-                          <div className="w-px h-full bg-gray-200 my-1 min-h-[24px]" />
-                        )}
-                      </div>
-                      <div className={cn("pb-4", isLast && "pb-0")}>
-                        <p className="text-small font-medium text-gray-900">
-                          {event.description}
-                        </p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[12px] text-gray-400">
-                            {formatDate(event.createdAt)}
-                          </span>
-                          {event.actor && (
+                        <div className={cn("pb-4", isLast && "pb-0")}>
+                          <p className="text-small font-medium text-gray-900">
+                            {event.description}
+                          </p>
+                          <div className="flex items-center gap-2 mt-0.5">
                             <span className="text-[12px] text-gray-400">
-                              · {event.actor}
+                              {formatDate(event.createdAt)}
                             </span>
-                          )}
+                            {event.actor && (
+                              <span className="text-[12px] text-gray-400">
+                                · {event.actor}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </Card>
 
             {/* Comments */}
             <Card padding="lg">
               <h2 className="text-h3 text-gray-900 mb-4">
-                Comments ({issue.comments.length})
+                Comments ({commentsList.length})
               </h2>
-              {issue.comments.length === 0 ? (
+              {commentsList.length === 0 ? (
                 <p className="text-small text-gray-400 text-center py-6">
                   No comments yet. Be the first to comment.
                 </p>
               ) : (
                 <div className="space-y-4">
-                  {issue.comments.map((comment) => (
+                  {commentsList.map((comment: any) => (
                     <div
                       key={comment.id}
                       className={cn(
@@ -199,12 +253,12 @@ export default function IssueDetailPage({
                             : "bg-gray-100 text-gray-600"
                         )}
                       >
-                        {comment.userName.charAt(0)}
+                        {comment.userName ? comment.userName.charAt(0) : "U"}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="text-small font-medium text-gray-900">
-                            {comment.userName}
+                            {comment.userName || "User"}
                           </span>
                           {comment.isOfficial && (
                             <Badge variant="primary" className="text-[9px] py-0">
@@ -228,9 +282,16 @@ export default function IssueDetailPage({
               <div className="mt-4 pt-4 border-t border-gray-100 flex gap-2">
                 <input
                   placeholder="Add a comment..."
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handlePostComment();
+                  }}
                   className="flex-1 h-9 px-3 rounded-lg bg-gray-50 border border-gray-200 text-small text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all"
                 />
-                <Button size="sm">Post</Button>
+                <Button size="sm" onClick={handlePostComment} disabled={commentMutation.isPending}>
+                  {commentMutation.isPending ? "Posting..." : "Post"}
+                </Button>
               </div>
             </Card>
           </div>
@@ -262,7 +323,7 @@ export default function IssueDetailPage({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-small text-gray-500">ID</span>
-                  <span className="text-small font-mono text-gray-600">
+                  <span className="text-small font-mono text-gray-600 truncate max-w-[120px]">
                     {issue.id}
                   </span>
                 </div>
@@ -292,22 +353,24 @@ export default function IssueDetailPage({
             </Card>
 
             {/* Reporter */}
-            <Card padding="md">
-              <h3 className="text-tiny text-gray-400 mb-3">Reported By</h3>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-semibold text-small">
-                  {issue.reportedBy.name.charAt(0)}
-                </div>
-                <div>
-                  <div className="text-small font-medium text-gray-900">
-                    {issue.reportedBy.name}
+            {issue.reportedBy && (
+              <Card padding="md">
+                <h3 className="text-tiny text-gray-400 mb-3">Reported By</h3>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-semibold text-small">
+                    {issue.reportedBy.name ? issue.reportedBy.name.charAt(0) : "U"}
                   </div>
-                  <div className="text-[12px] text-gray-400">
-                    {issue.reportedBy.issuesReported} reports
+                  <div>
+                    <div className="text-small font-medium text-gray-900">
+                      {issue.reportedBy.name}
+                    </div>
+                    <div className="text-[12px] text-gray-400">
+                      {issue.reportedBy.issuesReported || 0} reports
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+            )}
 
             {/* Location */}
             <Card padding="none" className="overflow-hidden">

@@ -64,10 +64,10 @@ export function IssueCard({ issue, compact = false, className }: IssueCardProps)
               <ArrowUp size={12} />
               {issue.upvotes}
             </span>
-            {issue.comments.length > 0 && (
+            {(issue.comments?.length || 0) > 0 && (
               <span className="inline-flex items-center gap-1 text-[12px]">
                 <MessageCircle size={12} />
-                {issue.comments.length}
+                {issue.comments?.length || 0}
               </span>
             )}
             <span className="text-[12px] ml-auto">

@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/status-badge";
 import { mockIssues } from "@/lib/mock-data";
 import { CATEGORIES, STATUS_CONFIG } from "@/lib/constants";
+import { useIssues } from "@/hooks/use-issues";
 import type { IssueCategory, IssueStatus } from "@/lib/types";
-import { Search, SlidersHorizontal, Grid3X3, List, FileSearch } from "lucide-react";
+import { Search, SlidersHorizontal, Grid3X3, List, FileSearch, Loader2 } from "lucide-react";
 
 export default function IssuesPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -17,23 +18,14 @@ export default function IssuesPage() {
   const [selectedStatuses, setSelectedStatuses] = useState<IssueStatus[]>([]);
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
 
-  const filteredIssues = mockIssues.filter((issue) => {
-    if (selectedCategories.length > 0 && !selectedCategories.includes(issue.category)) {
-      return false;
-    }
-    if (selectedStatuses.length > 0 && !selectedStatuses.includes(issue.status)) {
-      return false;
-    }
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return (
-        issue.title.toLowerCase().includes(q) ||
-        issue.description.toLowerCase().includes(q) ||
-        issue.location.address.toLowerCase().includes(q)
-      );
-    }
-    return true;
+  // Query options passed directly to backend repository logic
+  const { data: response, isLoading } = useIssues({
+    category: selectedCategories.join(','),
+    status: selectedStatuses.join(','),
+    q: searchQuery || undefined,
   });
+
+  const issuesList = response?.data || [];
 
   const toggleCategory = (cat: IssueCategory) => {
     setSelectedCategories((prev) =>
@@ -167,12 +159,17 @@ export default function IssuesPage() {
         {/* Results count */}
         <div className="flex items-center justify-between mb-4">
           <span className="text-small text-gray-500">
-            {filteredIssues.length} issue{filteredIssues.length !== 1 ? "s" : ""}
+            {issuesList.length} issue{issuesList.length !== 1 ? "s" : ""}
           </span>
         </div>
 
         {/* Issues */}
-        {filteredIssues.length === 0 ? (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-2" />
+            <p className="text-small text-gray-500">Loading issues...</p>
+          </div>
+        ) : issuesList.length === 0 ? (
           <EmptyState
             icon={<FileSearch size={24} />}
             title="No issues found"
@@ -199,7 +196,7 @@ export default function IssuesPage() {
                 : "space-y-2"
             )}
           >
-            {filteredIssues.map((issue) => (
+            {issuesList.map((issue: any) => (
               <IssueCard
                 key={issue.id}
                 issue={issue}

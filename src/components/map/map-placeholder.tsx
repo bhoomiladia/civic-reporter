@@ -2,31 +2,18 @@
 
 import { useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { mockIssues } from "@/lib/mock-data";
 import { CATEGORIES } from "@/lib/constants";
 import type { Issue } from "@/lib/types";
 
 interface MapPlaceholderProps {
+  issuesList?: Issue[];
   onPinClick?: (issue: Issue) => void;
   selectedIssueId?: string;
   className?: string;
 }
 
-/* Pin positions mapped from lat/lng to percentage coordinates on the map surface */
-const pinPositions: Record<string, { x: number; y: number }> = {
-  "ISS-001": { x: 42, y: 35 },
-  "ISS-002": { x: 55, y: 28 },
-  "ISS-003": { x: 30, y: 52 },
-  "ISS-004": { x: 65, y: 22 },
-  "ISS-005": { x: 22, y: 68 },
-  "ISS-006": { x: 70, y: 42 },
-  "ISS-007": { x: 48, y: 58 },
-  "ISS-008": { x: 18, y: 40 },
-  "ISS-009": { x: 78, y: 30 },
-  "ISS-010": { x: 35, y: 75 },
-};
-
 export function MapPlaceholder({
+  issuesList = [],
   onPinClick,
   selectedIssueId,
   className,
@@ -98,9 +85,6 @@ export function MapPlaceholder({
         {/* "Park" area */}
         <rect x="60%" y="15%" width="18%" height="20%" rx="8" fill="#e8f0e0" opacity="0.6" />
         <rect x="10%" y="55%" width="15%" height="18%" rx="6" fill="#e8f0e0" opacity="0.5" />
-
-        {/* "Water" feature */}
-        <path d="M 0 85 Q 25 75, 50 82 Q 75 90, 100 80 L 100 100 L 0 100 Z" fill="#d6e6f0" opacity="0.3" transform="scale(1)" style={{ transform: "scale(1%)" }} />
       </svg>
 
       {/* Neighborhood labels */}
@@ -118,9 +102,11 @@ export function MapPlaceholder({
       </div>
 
       {/* Issue pins */}
-      {mockIssues.map((issue) => {
-        const pos = pinPositions[issue.id];
-        if (!pos) return null;
+      {issuesList.map((issue, idx) => {
+        // Generate pseudo-coordinates deterministically based on ID characters if not explicitly within bounds
+        const hash = issue.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        const x = 15 + (hash % 70); // bounds [15, 85]
+        const y = 15 + ((hash >> 1) % 65); // bounds [15, 80]
 
         const catDef = CATEGORIES.find((c) => c.id === issue.category);
         if (!catDef) return null;
@@ -138,8 +124,8 @@ export function MapPlaceholder({
               (isSelected || isHovered) ? "z-20" : "z-10"
             )}
             style={{
-              left: `${pos.x}%`,
-              top: `${pos.y}%`,
+              left: `${x}%`,
+              top: `${y}%`,
               transform: `translate(-50%, -100%) ${
                 isSelected ? "scale(1.2)" : isHovered ? "scale(1.1)" : "scale(1)"
               }`,
@@ -194,7 +180,7 @@ export function MapPlaceholder({
 
       {/* Attribution */}
       <div className="absolute bottom-2 right-2 text-[9px] text-gray-400/50 select-none pointer-events-none">
-        Map data placeholder · Replace with Mapbox or Google Maps
+        OpenStreetMap grid simulation · Live Backend Data
       </div>
     </div>
   );

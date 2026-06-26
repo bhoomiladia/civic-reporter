@@ -5,10 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Plus, Minus, Locate, Layers } from "lucide-react";
 
 interface MapControlsProps {
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onLocate?: () => void;
   className?: string;
 }
 
-export function MapControls({ className }: MapControlsProps) {
+export function MapControls({ onZoomIn, onZoomOut, onLocate, className }: MapControlsProps) {
   return (
     <div
       className={cn(
@@ -19,14 +22,16 @@ export function MapControls({ className }: MapControlsProps) {
       {/* Zoom controls */}
       <div className="flex flex-col bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
         <button
-          className="w-10 h-10 flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors active:bg-gray-100"
+          onClick={onZoomIn}
+          className="w-10 h-10 flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors active:bg-gray-100 cursor-pointer"
           aria-label="Zoom in"
         >
           <Plus size={18} />
         </button>
         <div className="h-px bg-gray-200" />
         <button
-          className="w-10 h-10 flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors active:bg-gray-100"
+          onClick={onZoomOut}
+          className="w-10 h-10 flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors active:bg-gray-100 cursor-pointer"
           aria-label="Zoom out"
         >
           <Minus size={18} />
@@ -35,7 +40,8 @@ export function MapControls({ className }: MapControlsProps) {
 
       {/* Location button */}
       <button
-        className="w-10 h-10 flex items-center justify-center bg-white rounded-xl shadow-md border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors active:bg-gray-100"
+        onClick={onLocate}
+        className="w-10 h-10 flex items-center justify-center bg-white rounded-xl shadow-md border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors active:bg-gray-100 cursor-pointer"
         aria-label="Go to my location"
       >
         <Locate size={18} />
@@ -43,7 +49,7 @@ export function MapControls({ className }: MapControlsProps) {
 
       {/* Layers button */}
       <button
-        className="w-10 h-10 flex items-center justify-center bg-white rounded-xl shadow-md border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors active:bg-gray-100"
+        className="w-10 h-10 flex items-center justify-center bg-white rounded-xl shadow-md border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors active:bg-gray-100 cursor-pointer"
         aria-label="Toggle map layers"
       >
         <Layers size={18} />

@@ -5,10 +5,9 @@ import { formatDate } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { mockUsers, mockIssues } from "@/lib/mock-data";
+import { useAuth } from "@/contexts/auth-context";
+import { useIssues } from "@/hooks/use-issues";
 import {
-  User,
-  MapPin,
   Calendar,
   Settings,
   Bell,
@@ -17,14 +16,57 @@ import {
   Shield,
   Award,
   FileText,
+  Loader2,
+  LogIn,
 } from "lucide-react";
 import Link from "next/link";
 
 export default function ProfilePage() {
-  const user = mockUsers[0]; // Mock current user
-  const userIssues = mockIssues.filter(
-    (issue) => issue.reportedBy.id === user.id
-  );
+  const { user, isLoading: authLoading, loginWithGoogle, logout } = useAuth();
+  
+  // Fetch only this user's issues from backend
+  const { data: response, isLoading: issuesLoading } = useIssues({
+    assignee: user?.id || undefined, // or reported by logic in repository
+  });
+
+  const isLoading = authLoading || issuesLoading;
+  
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-surface-secondary">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-2" />
+          <p className="text-body text-gray-500">Loading profile details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not Logged In View
+  if (!user) {
+    return (
+      <div className="min-h-[calc(100vh-56px)] lg:min-h-screen bg-surface-secondary flex items-center justify-center p-4">
+        <Card padding="lg" className="max-w-md w-full text-center">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 mx-auto mb-4">
+            <LogIn size={24} />
+          </div>
+          <h1 className="text-h2 text-gray-900 mb-2">Access Your Profile</h1>
+          <p className="text-body text-gray-500 mb-6">
+            Sign in with Google to view your reported issues, track neighborhood resolutions, and customize alert settings.
+          </p>
+          <Button className="w-full" onClick={() => loginWithGoogle()}>
+            Sign In with Google
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  // Filter issues reported by this citizen user if server didn't already segment
+  const userIssues = response?.data?.filter((issue: any) => issue.reportedBy?.id === user.id) || [];
+  const issuesReportedCount = userIssues.length;
+  const issuesResolvedCount = userIssues.filter((issue: any) => issue.status === 'resolved').length;
+  const resolutionRate = issuesReportedCount > 0 ? Math.round((issuesResolvedCount / issuesReportedCount) * 100) : 0;
 
   return (
     <div className="min-h-[calc(100vh-56px)] lg:min-h-screen bg-surface-secondary">
@@ -32,14 +74,23 @@ export default function ProfilePage() {
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-700 font-bold text-xl">
-              {user.name.charAt(0)}
-            </div>
+            {user.avatar ? (
+              <img src={user.avatar} alt={user.name} className="w-16 h-16 rounded-2xl object-cover" />
+            ) : (
+              <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-700 font-bold text-xl">
+                {user.name.charAt(0)}
+              </div>
+            )}
             <div>
-              <h1 className="text-h2 text-gray-900">{user.name}</h1>
-              <p className="text-small text-gray-500 flex items-center gap-1">
+              <div className="flex items-center gap-2">
+                <h1 className="text-h2 text-gray-900">{user.name}</h1>
+                <Badge variant="primary" className="text-[10px] py-0 uppercase">
+                  {user.role}
+                </Badge>
+              </div>
+              <p className="text-small text-gray-500 flex items-center gap-1 mt-1">
                 <Calendar size={14} />
-                Joined {formatDate(user.joinedAt)}
+                Joined civic group
               </p>
             </div>
           </div>
@@ -51,19 +102,19 @@ export default function ProfilePage() {
         <div className="grid grid-cols-3 gap-3 mb-6">
           <Card padding="md" className="text-center">
             <div className="text-h2 text-gray-900 mb-0.5">
-              {user.issuesReported}
+              {issuesReportedCount}
             </div>
             <div className="text-small text-gray-500">Reported</div>
           </Card>
           <Card padding="md" className="text-center">
             <div className="text-h2 text-gray-900 mb-0.5">
-              {user.issuesResolved}
+              {issuesResolvedCount}
             </div>
             <div className="text-small text-gray-500">Resolved</div>
           </Card>
           <Card padding="md" className="text-center">
             <div className="text-h2 text-gray-900 mb-0.5">
-              {Math.round((user.issuesResolved / user.issuesReported) * 100)}%
+              {resolutionRate}%
             </div>
             <div className="text-small text-gray-500">Rate</div>
           </Card>
@@ -76,7 +127,7 @@ export default function ProfilePage() {
         </h2>
         <div className="space-y-2 mb-8">
           {userIssues.length > 0 ? (
-            userIssues.map((issue) => (
+            userIssues.map((issue: any) => (
               <Link key={issue.id} href={`/issues/${issue.id}`}>
                 <Card hover padding="sm">
                   <div className="flex items-center justify-between">
@@ -153,7 +204,7 @@ export default function ProfilePage() {
         </Card>
 
         {/* Sign out */}
-        <Button variant="ghost" className="w-full mt-6 text-gray-400 hover:text-red-600">
+        <Button variant="ghost" className="w-full mt-6 text-gray-400 hover:text-red-600" onClick={() => logout()}>
           <LogOut size={16} />
           Sign Out
         </Button>
