@@ -217,6 +217,14 @@ body {
    Utility Classes
    ============================================ */
 
+@utility text-cinematic-hero {
+  font-family: var(--font-serif);
+  font-size: clamp(3.5rem, 8.5vw, 8rem);
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  font-weight: 400;
+}
+
 @utility text-display {
   font-family: var(--font-serif);
   font-size: var(--text-display);
