@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { motion, useScroll, useTransform, useSpring } from "framer-motion";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -61,6 +61,7 @@ const SCENES = [
 
 export function ScrollStory() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   
   // Track scroll position of the entire container
   const { scrollYProgress } = useScroll({
@@ -79,49 +80,77 @@ export function ScrollStory() {
   const introBgOpacity = useTransform(smoothProgress, [0.11, 0.18], [1, 0]);
   const introBgPointerEvents = useTransform(smoothProgress, (v) => v >= 0.18 ? "none" : "auto");
 
-  // Cinematic autohide navbar transforms - slides out and fades out as soon as scroll starts
-  const headerY = useTransform(smoothProgress, [0, 0.015], [0, -70]);
-  const headerOpacity = useTransform(smoothProgress, [0, 0.015], [1, 0]);
-
   return (
     <div ref={containerRef} className="relative w-full min-h-[800vh] bg-white">
       {/* Cinematic Autohiding Navbar Header */}
-      <motion.header
-        style={{ y: headerY, opacity: headerOpacity }}
-        className="fixed top-0 inset-x-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100"
-      >
-        <div className="max-w-[1240px] mx-auto px-5 sm:px-8 h-[60px] flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <Logo size={42} className="transition-transform duration-200 group-hover:scale-105" />
-            <span className="font-semibold text-gray-900 text-[15px] tracking-[-0.02em]">
-              CIVIC Reporter
-            </span>
+      <div className="fixed top-6 inset-x-0 z-50 pointer-events-none flex justify-center">
+        <motion.header
+          style={{ y: useTransform(smoothProgress, [0, 0.015], [0, -100]), opacity: useTransform(smoothProgress, [0, 0.015], [1, 0]) }}
+          className="pointer-events-auto w-[calc(100%-2rem)] max-w-[1000px] h-[64px] rounded-full border border-white/20 bg-white/75 backdrop-blur-xl shadow-[0_12px_40px_-12px_rgba(0,0,0,0.08),0_1px_1px_rgba(0,0,0,0.02)] px-6 flex items-center justify-between"
+        >
+          <Link href="/" className="flex items-center gap-3 group">
+            <Logo size={42} className="transition-transform duration-300 group-hover:scale-105" />
+            <div className="flex flex-col">
+              <span className="font-semibold text-gray-900 text-[14px] tracking-tight leading-none mb-0.5">
+                CIVIC Reporter
+              </span>
+              <span className="text-[9px] text-gray-400 font-medium tracking-widest uppercase leading-none">
+                Civic Intelligence
+              </span>
+            </div>
           </Link>
-          <nav className="hidden sm:flex items-center gap-1">
-            <Link href="/map" className="px-3 py-1.5 text-[13px] font-medium text-gray-500 hover:text-gray-900 transition-colors rounded-md hover:bg-gray-50">
-              Map
-            </Link>
-            <Link href="/issues" className="px-3 py-1.5 text-[13px] font-medium text-gray-500 hover:text-gray-900 transition-colors rounded-md hover:bg-gray-50">
-              Issues
-            </Link>
-            <Link href="/community" className="px-3 py-1.5 text-[13px] font-medium text-gray-500 hover:text-gray-900 transition-colors rounded-md hover:bg-gray-50">
-              Community
-            </Link>
+          <nav className="hidden md:flex items-center gap-1 relative">
+            {[
+              { label: "Journey", href: "/" },
+              { label: "Map", href: "/map" },
+              { label: "Community", href: "/community" },
+              { label: "Impact", href: "/issues" }
+            ].map((item, idx) => {
+              const isActive = item.href === "/";
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="relative px-4 py-2 text-[13px] font-medium text-gray-600 hover:text-gray-900 transition-colors duration-300"
+                  onMouseEnter={() => setHoveredIndex(idx)}
+                  onMouseLeave={() => setHoveredIndex(null)}
+                >
+                  <span className="relative z-10">{item.label}</span>
+                  {isActive && (
+                    <motion.span
+                      layoutId="activeNavIndicator"
+                      className="absolute bottom-0 inset-x-4 h-[2px] bg-slate-900 rounded-full"
+                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                    />
+                  )}
+                  {hoveredIndex === idx && (
+                    <motion.span
+                      layoutId="hoverNavGlow"
+                      className="absolute inset-0 bg-slate-100/50 rounded-full -z-0"
+                      transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                    />
+                  )}
+                </Link>
+              );
+            })}
           </nav>
-          <div className="flex items-center gap-2.5">
-            <Link href="/map" className="hidden sm:block">
-              <Button variant="ghost" size="sm">
-                Open Map
-              </Button>
+          <div className="flex items-center gap-5">
+            <Link href="/map" className="text-[13px] font-medium text-gray-600 hover:text-gray-900 transition-colors duration-300">
+              Open Map
             </Link>
             <Link href="/report">
-              <Button size="sm">
+              <motion.button
+                whileHover={{ scale: 1.04, y: -1.5, boxShadow: "0px 10px 25px rgba(10, 17, 40, 0.15)" }}
+                whileTap={{ scale: 0.98, y: 0 }}
+                transition={{ type: "spring", stiffness: 400, damping: 22 }}
+                className="px-5 h-9 rounded-full bg-[#0a1128] text-white text-[13px] font-medium shadow-sm transition-shadow duration-300 flex items-center justify-center"
+              >
                 Report Issue
-              </Button>
+              </motion.button>
             </Link>
           </div>
-        </div>
-      </motion.header>
+        </motion.header>
+      </div>
 
       {/* Sticky container that locks the viewport */}
       <div className="sticky top-0 h-screen w-full overflow-hidden bg-[#fafafa]">
