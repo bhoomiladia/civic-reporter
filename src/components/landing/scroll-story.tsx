@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef } from "react";
 import { motion, useScroll, useTransform, useSpring } from "framer-motion";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { StorytellingMap } from "./storytelling-map";
-import { ArrowRight, Shield, Play, Square } from "lucide-react";
+import { ArrowRight, Shield } from "lucide-react";
 
 const SCENES = [
   {
@@ -81,77 +81,6 @@ export function ScrollStory() {
   // Cinematic autohide navbar transforms - slides out and fades out as soon as scroll starts
   const headerY = useTransform(smoothProgress, [0, 0.015], [0, -70]);
   const headerOpacity = useTransform(smoothProgress, [0, 0.015], [1, 0]);
-
-  // Autoplay Presentation state and controls
-  const [isPlaying, setIsPlaying] = useState(false);
-  const isPlayingRef = useRef(false);
-  const animationRef = useRef<number | null>(null);
-  const autoplayStartTimeRef = useRef<number>(0);
-
-  const startAutoplay = () => {
-    if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    setIsPlaying(true);
-    isPlayingRef.current = true;
-    autoplayStartTimeRef.current = Date.now();
-    
-    // Scroll to top instantly before starting, using behavior: 'auto' to bypass CSS smooth scrolling
-    window.scrollTo({ top: 0, behavior: "auto" });
-    
-    const duration = 25000; // 25 seconds is perfect for viewing the whole story once
-    let startTime: number | null = null;
-    
-    const step = (timestamp: number) => {
-      if (!startTime) startTime = timestamp;
-      const elapsed = timestamp - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      const maxScroll = (containerRef.current?.scrollHeight || document.documentElement.scrollHeight) - window.innerHeight;
-      window.scrollTo({ top: progress * maxScroll, behavior: "auto" });
-      
-      if (progress < 1 && isPlayingRef.current) {
-        animationRef.current = requestAnimationFrame(step);
-      } else {
-        stopAutoplay();
-      }
-    };
-    
-    animationRef.current = requestAnimationFrame(step);
-  };
-
-  const stopAutoplay = () => {
-    setIsPlaying(false);
-    isPlayingRef.current = false;
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-    }
-  };
-
-  // Clean up animation on unmount
-  useEffect(() => {
-    return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    };
-  }, []);
-
-  // Cancel autoplay immediately if the user scrolls manually (with a 800ms inertia cooldown)
-  useEffect(() => {
-    const handleUserScroll = () => {
-      if (isPlayingRef.current) {
-        // Ignore scroll inputs in the first 800ms to allow trackpad/scroll momentum to fully decay
-        if (Date.now() - autoplayStartTimeRef.current > 800) {
-          stopAutoplay();
-        }
-      }
-    };
-    
-    window.addEventListener("wheel", handleUserScroll, { passive: true });
-    window.addEventListener("touchmove", handleUserScroll, { passive: true });
-    return () => {
-      window.removeEventListener("wheel", handleUserScroll);
-      window.removeEventListener("touchmove", handleUserScroll);
-    };
-  }, []);
 
   return (
     <div ref={containerRef} className="relative w-full min-h-[800vh] bg-white">
@@ -242,30 +171,6 @@ export function ScrollStory() {
         <div className="absolute bottom-6 right-6 z-25 flex items-center gap-2.5 text-xs text-gray-400 font-medium pointer-events-none">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-900 animate-pulse" />
           <span>Scroll to progress the story</span>
-        </div>
-
-        {/* Autoplay Float Controller - Play entire animation smoothly once */}
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
-          <Button
-            onClick={isPlaying ? stopAutoplay : startAutoplay}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-full shadow-lg backdrop-blur-md transition-all duration-300 font-semibold text-xs border ${
-              isPlaying 
-                ? "bg-red-600/90 hover:bg-red-700 text-white border-red-500" 
-                : "bg-white/90 hover:bg-white text-gray-900 border-gray-200"
-            }`}
-          >
-            {isPlaying ? (
-              <>
-                <Square size={12} fill="currentColor" />
-                <span>Stop Presentation</span>
-              </>
-            ) : (
-              <>
-                <Play size={12} fill="currentColor" />
-                <span>Play Presentation</span>
-              </>
-            )}
-          </Button>
         </div>
       </div>
     </div>
