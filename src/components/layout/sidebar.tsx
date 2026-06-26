@@ -10,8 +10,8 @@ import {
   PlusCircle,
   Users,
   User,
-  Shield,
 } from "lucide-react";
+import { Logo } from "@/components/shared/logo";
 
 const iconComponents: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   map: Map,
@@ -35,11 +35,8 @@ export function Sidebar() {
       role="navigation"
       aria-label="Main navigation"
     >
-      {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 h-16 border-b border-gray-100">
-        <div className="w-8 h-8 rounded-lg bg-blue-700 flex items-center justify-center">
-          <Shield size={16} className="text-white" />
-        </div>
+        <Logo size={42} />
         <span className="font-semibold text-gray-900 text-[15px] tracking-tight">
           {APP_NAME}
         </span>

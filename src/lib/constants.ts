@@ -1,6 +1,6 @@
 import type { CategoryDefinition } from "./types";
 
-export const APP_NAME = "CIVC Reporter";
+export const APP_NAME = "CIVIC Reporter";
 export const APP_DESCRIPTION = "Report and track civic issues in your community";
 
 export const CATEGORIES: CategoryDefinition[] = [

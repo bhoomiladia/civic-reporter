@@ -11,6 +11,195 @@ import {
   Check
 } from "lucide-react";
 
+// Kinematics and physics simulation functions for the maintenance truck
+interface PathPoint {
+  x: number;
+  y: number;
+  theta: number;
+  kappa: number;
+}
+
+function getPathState(d: number, isReturn: boolean): PathPoint {
+  // Arc length constant for R = 15 turning 90 degrees
+  const ARC_LEN = 15 * Math.PI / 2; // ~23.56194
+
+  if (!isReturn) {
+    // Forward trip: City Hall (580, 145) -> Pothole (410, 280)
+    // Segments:
+    // 1. Line from (580, 145) to (495, 145) [length 85]
+    // 2. Arc with center (480, 145) and radius 15, from (495, 145) to (480, 160) [length ARC_LEN]
+    // 3. Line from (480, 160) to (480, 265) [length 105]
+    // 4. Arc with center (480, 280) and radius 15, from (480, 265) to (465, 280) [length ARC_LEN]
+    // 5. Line from (465, 280) to (410, 280) [length 55]
+    if (d <= 85) {
+      return { x: 580 - d, y: 145, theta: 180, kappa: 0 };
+    } else if (d <= 85 + ARC_LEN) {
+      const dLocal = d - 85;
+      const alpha = dLocal / 15;
+      return {
+        x: 480 + 15 * Math.cos(alpha),
+        y: 145 + 15 * Math.sin(alpha),
+        theta: 180 - alpha * 180 / Math.PI,
+        kappa: -1 / 15
+      };
+    } else if (d <= 85 + ARC_LEN + 105) {
+      const dLocal = d - (85 + ARC_LEN);
+      return { x: 480, y: 160 + dLocal, theta: 90, kappa: 0 };
+    } else if (d <= 85 + ARC_LEN + 105 + ARC_LEN) {
+      const dLocal = d - (85 + ARC_LEN + 105);
+      const alpha = dLocal / 15;
+      return {
+        x: 480 - 15 * Math.sin(alpha),
+        y: 280 - 15 * Math.cos(alpha),
+        theta: 90 + alpha * 180 / Math.PI,
+        kappa: 1 / 15
+      };
+    } else {
+      const dLocal = d - (85 + ARC_LEN + 105 + ARC_LEN);
+      return { x: 465 - dLocal, y: 280, theta: 180, kappa: 0 };
+    }
+  } else {
+    // Return trip: Pothole (410, 280) -> City Hall (580, 145)
+    // Segments:
+    // 1. Line from (410, 280) to (465, 280) [length 55]
+    // 2. Arc with center (480, 280) and radius 15, from (465, 280) to (480, 265) [length ARC_LEN]
+    // 3. Line from (480, 265) to (480, 160) [length 105]
+    // 4. Arc with center (480, 145) and radius 15, from (480, 160) to (495, 145) [length ARC_LEN]
+    // 5. Line from (495, 145) to (580, 145) [length 85]
+    if (d <= 55) {
+      return { x: 410 + d, y: 280, theta: 360, kappa: 0 };
+    } else if (d <= 55 + ARC_LEN) {
+      const dLocal = d - 55;
+      const alpha = dLocal / 15;
+      return {
+        x: 480 - 15 * Math.cos(alpha),
+        y: 280 - 15 * Math.sin(alpha),
+        theta: 360 - alpha * 180 / Math.PI,
+        kappa: -1 / 15
+      };
+    } else if (d <= 55 + ARC_LEN + 105) {
+      const dLocal = d - (55 + ARC_LEN);
+      return { x: 480, y: 265 - dLocal, theta: 270, kappa: 0 };
+    } else if (d <= 55 + ARC_LEN + 105 + ARC_LEN) {
+      const dLocal = d - (55 + ARC_LEN + 105);
+      const alpha = dLocal / 15;
+      return {
+        x: 480 + 15 * Math.sin(alpha),
+        y: 145 + 15 * Math.cos(alpha),
+        theta: 270 + alpha * 180 / Math.PI,
+        kappa: 1 / 15
+      };
+    } else {
+      const dLocal = d - (55 + ARC_LEN + 105 + ARC_LEN);
+      return { x: 495 + dLocal, y: 145, theta: 360, kappa: 0 };
+    }
+  }
+}
+
+function getTruckKinematics(p: number) {
+  const ARC_LEN = 15 * Math.PI / 2;
+  const L = 85 + ARC_LEN + 105 + ARC_LEN + 55; // 292.12389
+  
+  let isReturn = false;
+  let t = 0;
+  let opacity = 0;
+  
+  if (p >= 0.59 && p <= 0.67) {
+    // Forward trip
+    isReturn = false;
+    // Map p in [0.60, 0.66] to t in [0, 1]
+    const pStart = 0.60;
+    const pEnd = 0.66;
+    t = (p - pStart) / (pEnd - pStart);
+    t = Math.max(0, Math.min(1, t));
+    
+    // Opacity fades in at 0.59 to 0.61, fades out at 0.66 to 0.67
+    if (p < 0.61) {
+      opacity = (p - 0.59) / 0.02;
+    } else if (p > 0.65) {
+      opacity = 1 - (p - 0.65) / 0.02;
+    } else {
+      opacity = 1;
+    }
+    opacity = Math.max(0, Math.min(1, opacity));
+  } else if (p >= 0.71 && p <= 0.79) {
+    // Return trip
+    isReturn = true;
+    const pStart = 0.72;
+    const pEnd = 0.78;
+    t = (p - pStart) / (pEnd - pStart);
+    t = Math.max(0, Math.min(1, t));
+    
+    // Opacity fades in at 0.71 to 0.73, fades out at 0.77 to 0.79
+    if (p < 0.73) {
+      opacity = (p - 0.71) / 0.02;
+    } else if (p > 0.77) {
+      opacity = 1 - (p - 0.77) / 0.02;
+    } else {
+      opacity = 1;
+    }
+    opacity = Math.max(0, Math.min(1, opacity));
+  } else {
+    // Inactive
+    return {
+      x: 580,
+      y: 145,
+      rotate: 180,
+      opacity: 0,
+      bodyTranslateX: 0,
+      bodyTranslateY: 0,
+      wheelOffset: 0
+    };
+  }
+  
+  // Smootherstep calculation
+  const s = 6 * Math.pow(t, 5) - 15 * Math.pow(t, 4) + 10 * Math.pow(t, 3);
+  const d = s * L;
+  
+  // Velocity factor (ds/dt)
+  const v_factor = 30 * Math.pow(t, 4) - 60 * Math.pow(t, 3) + 30 * Math.pow(t, 2);
+  const v_norm = v_factor / 1.875; // Peak value at t=0.5 is 1.875, so v_norm ranges [0, 1]
+  
+  // Acceleration factor (dv/dt)
+  const a_factor = 120 * Math.pow(t, 3) - 180 * Math.pow(t, 2) + 60 * t;
+  const a_norm = a_factor / 5.77; // Peak value is ~5.77, so a_norm ranges [-1, 1]
+  
+  const state = getPathState(d, isReturn);
+  
+  // Dynamic Roll (suspension side-to-side reaction)
+  // Shift perpendicular to heading direction
+  const K_roll = 45; // roll translation coefficient
+  const rollOffset = state.kappa * v_norm * K_roll;
+  const rollAngleRad = (state.theta + 90) * Math.PI / 180;
+  const rollX = rollOffset * Math.cos(rollAngleRad);
+  const rollY = rollOffset * Math.sin(rollAngleRad);
+  
+  // Dynamic Pitch (suspension front-to-back reaction)
+  // Shift along heading direction when accelerating/decelerating
+  const K_pitch = 2.5; // pitch translation coefficient (in pixels)
+  const pitchOffset = -a_norm * K_pitch;
+  const pitchAngleRad = state.theta * Math.PI / 180;
+  const pitchX = pitchOffset * Math.cos(pitchAngleRad);
+  const pitchY = pitchOffset * Math.sin(pitchAngleRad);
+  
+  // Combined chassis offsets
+  const bodyTranslateX = rollX + pitchX;
+  const bodyTranslateY = rollY + pitchY;
+  
+  // Wheel offset based on distance traveled
+  const wheelOffset = d;
+  
+  return {
+    x: state.x,
+    y: state.y,
+    rotate: state.theta,
+    opacity,
+    bodyTranslateX,
+    bodyTranslateY,
+    wheelOffset
+  };
+}
+
 interface StorytellingMapProps {
   progress: MotionValue<number>;
 }
@@ -46,6 +235,20 @@ export function StorytellingMap({ progress }: StorytellingMapProps) {
     } else {
       if (activeScene !== 8) setActiveScene(8);
     }
+  });
+
+  // ---- DYNAMIC SCANNING STATES ----
+  const scanStateText = useTransform(progress, (p) => {
+    if (p < 0.258) return "Detecting road surface...";
+    if (p < 0.266) return "GPS Lock: 142 Main St";
+    if (p < 0.274) return "AI Classifying anomaly...";
+    if (p < 0.282) return "Matching department...";
+    return "City Operations Matched (98% Conf)";
+  });
+
+  const [scanState, setScanState] = useState("Detecting road surface...");
+  useMotionValueEvent(scanStateText, "change", (latest) => {
+    setScanState(latest);
   });
 
   // ---- CAMERA TRANSFORMS (Continuous shot drone simulation) ----
@@ -167,41 +370,14 @@ export function StorytellingMap({ progress }: StorytellingMapProps) {
     { clamp: true }
   );
 
-  // Scene 6 & 7 Maintenance Truck driving
-  // Leg 1-3 (Forward): City Hall (580, 145) to parked beside Pothole (410, 280) [0.60 to 0.66]
-  // Leg 4-6 (Return): Pothole (410, 280) to City Hall (580, 145) [0.72 to 0.78]
-  const rawTruckX = useTransform(
-    progress,
-    [0.59, 0.60, 0.62, 0.64, 0.66, 0.72, 0.74, 0.76, 0.78, 0.79],
-    [580, 580, 480, 480, 410, 410, 480, 480, 580, 580],
-    { clamp: true }
-  );
-  const rawTruckY = useTransform(
-    progress,
-    [0.59, 0.60, 0.62, 0.64, 0.66, 0.72, 0.74, 0.76, 0.78, 0.79],
-    [145, 145, 145, 280, 280, 280, 280, 145, 145, 145],
-    { clamp: true }
-  );
-  const rawTruckRotate = useTransform(
-    progress,
-    [
-      0.59,
-      0.60, 0.619, 0.621, 0.639, 0.641, 0.66,
-      0.719, 0.721, 0.739, 0.741, 0.759, 0.761, 0.78
-    ],
-    [
-      180,
-      180, 180, 90, 90, 180, 180,
-      180, 360, 360, 270, 270, 360, 360
-    ],
-    { clamp: true }
-  );
-
-  // Wrap coordinates and rotation in useSpring for high-end cinematic spring motion physics!
-  const truckX = useSpring(rawTruckX, { stiffness: 60, damping: 15 });
-  const truckY = useSpring(rawTruckY, { stiffness: 60, damping: 15 });
-  const truckRotate = useSpring(rawTruckRotate, { stiffness: 85, damping: 16 });
-  const truckOpacity = useTransform(progress, [0.59, 0.61, 0.79, 0.81], [0, 1, 1, 0], { clamp: true });
+  // Scene 6 & 7 Maintenance Truck driving with realistic kinematics
+  const truckX = useTransform(progress, (p) => getTruckKinematics(p).x);
+  const truckY = useTransform(progress, (p) => getTruckKinematics(p).y);
+  const truckRotate = useTransform(progress, (p) => getTruckKinematics(p).rotate);
+  const truckOpacity = useTransform(progress, (p) => getTruckKinematics(p).opacity);
+  const bodyTranslateX = useTransform(progress, (p) => getTruckKinematics(p).bodyTranslateX);
+  const bodyTranslateY = useTransform(progress, (p) => getTruckKinematics(p).bodyTranslateY);
+  const wheelOffset = useTransform(progress, (p) => getTruckKinematics(p).wheelOffset);
 
   // Caution Rings Ripple (active during repair Scene 6)
   const cautionRingOpacity = useTransform(progress, [0.69, 0.70, 0.74, 0.75], [0, 0.8, 0.8, 0], { clamp: true });
@@ -247,7 +423,7 @@ export function StorytellingMap({ progress }: StorytellingMapProps) {
           scale: cameraScale,
           x: cameraX,
           y: cameraY,
-          rotate: cameraRotate,
+          rotate: 0,
           opacity: mapOpacity,
         }}
       >
@@ -338,30 +514,71 @@ export function StorytellingMap({ progress }: StorytellingMapProps) {
             <rect x="390" y="480" width="80" height="70" rx="6" />
           </g>
 
-          {/* Government City Hall HQ (Classical Columns + Pediment) - appears only after Scene 4 (i.e. activeScene >= 5) */}
           {activeScene >= 5 && (
             <motion.g 
-              initial={{ opacity: 0, scale: 0.8 }}
+              initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.6, ease: "easeOut" }}
-              style={{ x: 540, y: 101 }}
-              fill="#1e3a6e"
+              style={{ x: 535, y: 100 }}
             >
-              {/* Pediment / Roof */}
-              <path d="M 0 15 L 40 0 L 80 15 Z" fill="#1e293b" />
-              {/* Architrave */}
-              <rect x="4" y="15" width="72" height="6" fill="#1e3a6e" />
-              {/* Columns */}
-              <rect x="12" y="21" width="6" height="23" fill="#1e3a6e" />
-              <rect x="28" y="21" width="6" height="23" fill="#1e3a6e" />
-              <rect x="46" y="21" width="6" height="23" fill="#1e3a6e" />
-              <rect x="62" y="21" width="6" height="23" fill="#1e3a6e" />
-              {/* Foundation base */}
-              <rect x="2" y="44" width="76" height="6" fill="#1e3a6e" />
-              {/* White Door */}
-              <rect x="34" y="26" width="12" height="18" fill="#ffffff" />
-              {/* Light-up glow indicator */}
-              <circle cx="40" cy="8" r="4.5" fill="#60a5fa" className="animate-pulse" />
+              {/* Civic Signage Header */}
+              <text x="45" y="-5" textAnchor="middle" fill="#475569" fontSize="6" fontWeight="bold" fontFamily="sans-serif" letterSpacing="0.05em">MUNICIPAL CORP.</text>
+              {/* Subtle ground shadow */}
+              <rect x="0" y="51" width="90" height="4" rx="2" fill="#000000" fillOpacity="0.08" />
+              
+              {/* Foundation steps / base plate */}
+              <rect x="2" y="47" width="86" height="5" fill="#94a3b8" rx="0.5" />
+              <rect x="6" y="44" width="78" height="3" fill="#cbd5e1" rx="0.5" />
+
+              {/* Side Wings (Neutral concrete masonry panels) */}
+              <rect x="8" y="15" width="20" height="30" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="0.8" rx="0.5" />
+              <rect x="62" y="15" width="20" height="30" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="0.8" rx="0.5" />
+              
+              {/* Side Wing Windows (Clean glass strips) */}
+              <rect x="12" y="20" width="4" height="8" fill="#475569" rx="0.5" />
+              <rect x="18" y="20" width="4" height="8" fill="#475569" rx="0.5" />
+              <rect x="12" y="31" width="4" height="8" fill="#475569" rx="0.5" />
+              <rect x="18" y="31" width="4" height="8" fill="#475569" rx="0.5" />
+
+              <rect x="68" y="20" width="4" height="8" fill="#475569" rx="0.5" />
+              <rect x="74" y="20" width="4" height="8" fill="#475569" rx="0.5" />
+              <rect x="68" y="31" width="4" height="8" fill="#475569" rx="0.5" />
+              <rect x="74" y="31" width="4" height="8" fill="#475569" rx="0.5" />
+
+              {/* Central Atrium Block (Double height glass structure with concrete frame) */}
+              <rect x="28" y="4" width="34" height="40" fill="#cbd5e1" stroke="#64748b" strokeWidth="1" rx="1" />
+              <rect x="31" y="8" width="28" height="36" fill="#1e293b" rx="0.5" /> {/* Atrium glass background */}
+
+              {/* Modern vertical columns / piers */}
+              <rect x="33" y="4" width="2.5" height="40" fill="#f1f5f9" />
+              <rect x="41" y="4" width="2.5" height="40" fill="#f1f5f9" />
+              <rect x="46.5" y="4" width="2.5" height="40" fill="#f1f5f9" />
+              <rect x="54.5" y="4" width="2.5" height="40" fill="#f1f5f9" />
+
+              {/* Entrance Portal (Large door frame) */}
+              <rect x="37.5" y="26" width="15" height="18" fill="#1e3a6e" stroke="#f1f5f9" strokeWidth="0.8" rx="0.5" />
+              <rect x="40" y="29" width="10" height="15" fill="#f8fafc" opacity="0.95" rx="0.2" />
+              {/* Glass door seam */}
+              <line x1="45" y1="29" x2="45" y2="44" stroke="#64748b" strokeWidth="0.5" />
+
+              {/* Modern flat roof overhangs */}
+              <rect x="26" y="2" width="38" height="3" fill="#64748b" rx="0.5" />
+              <rect x="6" y="13" width="24" height="2" fill="#94a3b8" rx="0.5" />
+              <rect x="60" y="13" width="24" height="2" fill="#94a3b8" rx="0.5" />
+
+              {/* Subtle architectural detailing / horizontal louvers */}
+              <line x1="31" y1="12" x2="59" y2="12" stroke="#475569" strokeWidth="0.8" />
+              <line x1="31" y1="16" x2="59" y2="16" stroke="#475569" strokeWidth="0.8" />
+
+              {/* Official Plaque Signage next to entrance */}
+              <rect x="56" y="30" width="4.5" height="6" fill="#0f172a" rx="0.5" />
+              <line x1="57" y1="32" x2="59" y2="32" stroke="#f1f5f9" strokeWidth="0.4" />
+              <line x1="57" y1="34" x2="58.5" y2="34" stroke="#f1f5f9" strokeWidth="0.4" />
+
+              {/* Flagpole & Official Blue/Gold Civic Flag */}
+              <line x1="3" y1="22" x2="3" y2="49" stroke="#64748b" strokeWidth="0.8" />
+              <path d="M 3 22 L 14 25 L 3 28 Z" fill="#1e3a6e" />
+              <circle cx="3" cy="21.5" r="0.8" fill="#e2e8f0" />
             </motion.g>
           )}
 
@@ -557,37 +774,56 @@ export function StorytellingMap({ progress }: StorytellingMapProps) {
               {/* Ground Shadow */}
               <rect x="-24" y="-12" width="48" height="24" rx="4" fill="#000000" fillOpacity="0.15" />
               
-              {/* Main body (orange/yellow container) */}
-              <rect x="-22" y="-10" width="44" height="20" rx="3" fill="#f59e0b" stroke="#1e293b" strokeWidth="1.5" />
-              
-              {/* Cabin (windshield and side windows) */}
-              <rect x="6" y="-8" width="12" height="16" rx="2" fill="#1e293b" />
-              {/* Windshield */}
-              <rect x="12" y="-6" width="4" height="12" fill="#e2e8f0" />
-              {/* Side Windows */}
-              <rect x="8" y="-7" width="3" height="2" fill="#e2e8f0" />
-              <rect x="8" y="5" width="3" height="2" fill="#e2e8f0" />
-              
-              {/* Cargo bed divider */}
-              <line x1="4" y1="-10" x2="4" y2="10" stroke="#1e293b" strokeWidth="1.5" />
-              
-              {/* Utility details in cargo bed */}
-              <rect x="-16" y="-6" width="16" height="12" fill="#d97706" stroke="#1e293b" strokeWidth="1" />
-              <line x1="-12" y1="-3" x2="-4" y2="-3" stroke="#1e293b" strokeWidth="1" />
-              <line x1="-12" y1="1" x2="-4" y2="1" stroke="#1e293b" strokeWidth="1" />
+              {/* Wheels visible from top-down on the sides, treads rotate based on distance traveled */}
+              {/* Front Left Wheel */}
+              <g transform="translate(8, -11.5)">
+                <rect x="0" y="0" width="8" height="2" rx="0.5" fill="#1e293b" />
+                <motion.line x1="0" y1="1" x2="8" y2="1" stroke="#4b5563" strokeWidth="0.8" strokeDasharray="2 2" style={{ strokeDashoffset: wheelOffset }} />
+              </g>
+              {/* Front Right Wheel */}
+              <g transform="translate(8, 9.5)">
+                <rect x="0" y="0" width="8" height="2" rx="0.5" fill="#1e293b" />
+                <motion.line x1="0" y1="1" x2="8" y2="1" stroke="#4b5563" strokeWidth="0.8" strokeDasharray="2 2" style={{ strokeDashoffset: wheelOffset }} />
+              </g>
+              {/* Rear Left Wheel */}
+              <g transform="translate(-14, -11.5)">
+                <rect x="0" y="0" width="8" height="2" rx="0.5" fill="#1e293b" />
+                <motion.line x1="0" y1="1" x2="8" y2="1" stroke="#4b5563" strokeWidth="0.8" strokeDasharray="2 2" style={{ strokeDashoffset: wheelOffset }} />
+              </g>
+              {/* Rear Right Wheel */}
+              <g transform="translate(-14, 9.5)">
+                <rect x="0" y="0" width="8" height="2" rx="0.5" fill="#1e293b" />
+                <motion.line x1="0" y1="1" x2="8" y2="1" stroke="#4b5563" strokeWidth="0.8" strokeDasharray="2 2" style={{ strokeDashoffset: wheelOffset }} />
+              </g>
 
-              {/* Side mirrors */}
-              <rect x="10" y="-12" width="3" height="2" rx="0.5" fill="#1e293b" />
-              <rect x="10" y="10" width="3" height="2" rx="0.5" fill="#1e293b" />
+              {/* Truck Body - Suspenion roll and pitch movement shift the body relative to the chassis */}
+              <motion.g style={{ x: bodyTranslateX, y: bodyTranslateY }}>
+                {/* Main body (orange/yellow container) */}
+                <rect x="-22" y="-10" width="44" height="20" rx="3" fill="#f59e0b" stroke="#1e293b" strokeWidth="1.5" />
+                
+                {/* Cabin (windshield and side windows) */}
+                <rect x="6" y="-8" width="12" height="16" rx="2" fill="#1e293b" />
+                {/* Windshield */}
+                <rect x="12" y="-6" width="4" height="12" fill="#e2e8f0" />
+                {/* Side Windows */}
+                <rect x="8" y="-7" width="3" height="2" fill="#e2e8f0" />
+                <rect x="8" y="5" width="3" height="2" fill="#e2e8f0" />
+                
+                {/* Cargo bed divider */}
+                <line x1="4" y1="-10" x2="4" y2="10" stroke="#1e293b" strokeWidth="1.5" />
+                
+                {/* Utility details in cargo bed */}
+                <rect x="-16" y="-6" width="16" height="12" fill="#d97706" stroke="#1e293b" strokeWidth="1" />
+                <line x1="-12" y1="-3" x2="-4" y2="-3" stroke="#1e293b" strokeWidth="1" />
+                <line x1="-12" y1="1" x2="-4" y2="1" stroke="#1e293b" strokeWidth="1" />
 
-              {/* Front bumper */}
-              <rect x="22" y="-5" width="2" height="10" rx="0.5" fill="#94a3b8" stroke="#1e293b" strokeWidth="1" />
+                {/* Side mirrors */}
+                <rect x="10" y="-12" width="3" height="2" rx="0.5" fill="#1e293b" />
+                <rect x="10" y="10" width="3" height="2" rx="0.5" fill="#1e293b" />
 
-              {/* Wheels visible from top-down on the sides */}
-              <rect x="8" y="-11.5" width="8" height="2" rx="0.5" fill="#334155" />
-              <rect x="8" y="9.5" width="8" height="2" rx="0.5" fill="#334155" />
-              <rect x="-14" y="-11.5" width="8" height="2" rx="0.5" fill="#334155" />
-              <rect x="-14" y="9.5" width="8" height="2" rx="0.5" fill="#334155" />
+                {/* Front bumper */}
+                <rect x="22" y="-5" width="2" height="10" rx="0.5" fill="#94a3b8" stroke="#1e293b" strokeWidth="1" />
+              </motion.g>
             </motion.g>
           )}
 
@@ -655,6 +891,8 @@ export function StorytellingMap({ progress }: StorytellingMapProps) {
               ))}
             </>
           )}
+
+
         </svg>
       </motion.div>
 
@@ -664,34 +902,43 @@ export function StorytellingMap({ progress }: StorytellingMapProps) {
       <div className="absolute top-[31%] left-[10%] text-[9px] tracking-[0.05em] font-bold text-gray-500 pointer-events-none italic">Main Street</div>
       <motion.div className="absolute inset-0 bg-black pointer-events-none z-15" style={{ opacity: mapDimOpacity }} />
 
-      {/* ─── Scene 3: Realistic Phone Mockup (Light themed real app UI) ─── */}
+      {/* ─── Scene 3: Flagship Mobile Phone Mockup Overlay ─── */}
       <AnimatePresence>
         {activeScene === 3 && (
           <motion.div
-            initial={{ y: 350, opacity: 0, scale: 0.9 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 350, opacity: 0, scale: 0.9 }}
-            transition={{ type: "spring", stiffness: 100, damping: 22 }}
-            className="absolute top-[12%] left-[47%] w-[230px] h-[510px] bg-slate-950 rounded-[38px] p-1.5 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] border-[7px] border-slate-900 z-35 overflow-hidden select-none"
+            initial={{ opacity: 0, scale: 0.96, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 20 }}
+            transition={{ type: "spring", stiffness: 120, damping: 20 }}
+            className="absolute top-[12%] left-[47%] w-[230px] h-[510px] bg-[#1e2022] rounded-[34px] p-1 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.65),0_15px_30px_-10px_rgba(0,0,0,0.4)] border-[3.5px] border-[#2c2d30] z-35 overflow-hidden select-none flex flex-col"
           >
-            {/* Phone Notch / Speaker Mockup */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-4 bg-slate-900 rounded-b-xl z-45 flex justify-center items-start pt-0.5">
-              <div className="w-10 h-0.5 bg-slate-800 rounded-full" />
+            {/* Dynamic Island */}
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-16 h-3 bg-black rounded-full z-45 flex items-center justify-end px-2 gap-1.5 shadow-[inset_0_1px_2px_rgba(255,255,255,0.15)]">
+              <div className="w-1 h-1 rounded-full bg-slate-900 border-[0.2px] border-cyan-500/20" />
+              <div className="w-0.5 h-0.5 rounded-full bg-slate-950" />
             </div>
 
-            {/* Screen Gloss Highlight Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/10 pointer-events-none z-30" />
-
-            {/* Phone Shell Side Buttons Mockup */}
-            <div className="absolute -left-[7px] top-24 w-[2px] h-10 bg-slate-800 rounded-l" />
-            <div className="absolute -left-[7px] top-38 w-[2px] h-14 bg-slate-800 rounded-l" />
-            <div className="absolute -right-[7px] top-32 w-[2px] h-16 bg-slate-800 rounded-r" />
+            {/* Glass Sheen Reflection Overlay */}
+            <div className="absolute inset-0 pointer-events-none z-40 overflow-hidden rounded-[30px]">
+              <motion.div 
+                className="absolute -inset-[200%] bg-gradient-to-tr from-transparent via-white/5 to-transparent rotate-[35deg]"
+                animate={{
+                  x: ["-50%", "50%"],
+                  y: ["-50%", "50%"]
+                }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 8,
+                  ease: "linear"
+                }}
+              />
+            </div>
 
             {/* Real Light-Themed App UI content screen */}
-            <div className="relative w-full h-full bg-[#f4f4f5] rounded-[28px] overflow-hidden flex flex-col justify-between z-20 font-sans">
+            <div className="relative w-full h-full bg-[#f7f7f5] rounded-[30px] overflow-hidden flex flex-col justify-between z-20 font-sans shadow-inner">
               
               {/* Status bar */}
-              <div className="flex justify-between items-center text-[9px] text-gray-500 font-semibold px-4 pt-4 pb-1">
+              <div className="flex justify-between items-center text-[8.5px] text-gray-500 font-semibold px-4 pt-4 pb-1">
                 <span>9:41 AM</span>
                 <div className="flex items-center gap-1">
                   <span className="w-2.5 h-1.5 bg-gray-600 rounded-sm" />
@@ -700,45 +947,45 @@ export function StorytellingMap({ progress }: StorytellingMapProps) {
               </div>
 
               {/* Navigation Header */}
-              <div className="bg-white border-b border-gray-200 py-2.5 px-3 flex items-center justify-between shadow-xs">
-                <div className="flex items-center gap-1 text-[11px] text-gray-500 font-medium">
-                  <ArrowLeft size={12} />
+              <div className="bg-white border-b border-gray-150 py-2.5 px-3 flex items-center justify-between shadow-xs">
+                <div className="flex items-center gap-1 text-[10px] text-gray-500 font-medium">
+                  <ArrowLeft size={10} />
                   <span>Cancel</span>
                 </div>
-                <span className="text-[11px] font-bold text-gray-900">Report Issue</span>
+                <span className="text-[10px] font-semibold text-gray-900">Report Issue</span>
                 <div className="w-10" />
               </div>
 
               {/* Step indicator */}
-              <div className="bg-white border-b border-gray-100 py-1.5 px-2 flex items-center justify-between text-[8px] font-bold text-gray-400">
+              <div className="bg-white border-b border-gray-100 py-1.5 px-3 flex items-center justify-between text-[7.5px] font-semibold text-gray-400">
                 {/* Step 1: Scan */}
-                <div className={`flex items-center gap-0.5 ${mobileStage > 1 ? "text-green-600" : "text-blue-700"}`}>
+                <div className={`flex items-center gap-1 ${mobileStage > 1 ? "text-green-600" : "text-slate-800"}`}>
                   {mobileStage > 1 ? (
-                    <Check size={8} className="bg-green-100 rounded-full p-0.5" />
+                    <Check size={8} className="bg-green-50 rounded-full p-0.5" />
                   ) : (
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-700 animate-pulse" />
+                    <span className="w-1 h-1 rounded-full bg-slate-800 animate-pulse" />
                   )}
                   <span>Scan</span>
                 </div>
                 
-                <div className="w-2.5 h-[1px] bg-gray-200" />
+                <div className="w-4 h-[1px] bg-gray-150" />
                 
                 {/* Step 2: Review */}
-                <div className={`flex items-center gap-0.5 ${mobileStage > 2 ? "text-green-600" : mobileStage === 2 ? "text-blue-700" : "text-gray-400"}`}>
+                <div className={`flex items-center gap-1 ${mobileStage > 2 ? "text-green-600" : mobileStage === 2 ? "text-slate-800" : "text-gray-400"}`}>
                   {mobileStage > 2 ? (
-                    <Check size={8} className="bg-green-100 rounded-full p-0.5" />
+                    <Check size={8} className="bg-green-50 rounded-full p-0.5" />
                   ) : mobileStage === 2 ? (
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-700 animate-pulse" />
+                    <span className="w-1 h-1 rounded-full bg-slate-800 animate-pulse" />
                   ) : null}
                   <span>Review</span>
                 </div>
                 
-                <div className="w-2.5 h-[1px] bg-gray-200" />
+                <div className="w-4 h-[1px] bg-gray-150" />
                 
                 {/* Step 3: Success */}
-                <div className={`flex items-center gap-0.5 ${mobileStage === 3 ? "text-green-600 font-bold" : "text-gray-400"}`}>
+                <div className={`flex items-center gap-1 ${mobileStage === 3 ? "text-green-600" : "text-gray-400"}`}>
                   {mobileStage === 3 && (
-                    <Check size={8} className="bg-green-100 rounded-full p-0.5" />
+                    <Check size={8} className="bg-green-50 rounded-full p-0.5" />
                   )}
                   <span>Success</span>
                 </div>
@@ -746,146 +993,179 @@ export function StorytellingMap({ progress }: StorytellingMapProps) {
 
               {/* Form Content Area / Mobile Workflow Phases */}
               {mobileStage === 1 && (
-                <>
-                  <div className="flex-1 p-3 space-y-3 overflow-y-auto">
-                    {/* Photo scanning preview */}
-                    <div className="relative h-32 bg-slate-900 rounded-xl overflow-hidden flex items-center justify-center border border-gray-200 shadow-sm">
-                      {/* Placeholder pothole texture */}
-                      <div className="absolute inset-0 bg-slate-800 flex flex-col items-center justify-center">
-                        <div className="w-24 h-12 bg-slate-700 rounded-full blur-md opacity-60" />
-                        <div className="w-16 h-8 bg-slate-900 rounded-full blur-xs opacity-90 -mt-6 border border-dashed border-red-500/40" />
-                      </div>
-                      {/* AI Scanning overlay line */}
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex-1 p-3.5 space-y-3.5 overflow-y-auto flex flex-col justify-between"
+                >
+                  {/* Expanded Camera Preview */}
+                  <div className="relative flex-1 min-h-[160px] bg-slate-900 rounded-2xl overflow-hidden flex items-center justify-center border border-gray-200/40 shadow-inner">
+                    {/* Live road simulation background */}
+                    <div className="absolute inset-0 bg-[#57534e] flex flex-col items-center justify-center">
+                      {/* Asphalt textures and cracking */}
+                      <div className="absolute inset-0 bg-[radial-gradient(#3e3c3a_1px,transparent_1px)] [background-size:16px_16px] opacity-40" />
+                      {/* Pothole details */}
+                      <svg className="w-32 h-20 opacity-80" viewBox="0 0 100 60">
+                        <path d="M 10 30 C 15 15, 30 10, 50 12 C 70 14, 85 20, 90 35 C 80 48, 60 52, 40 48 C 20 44, 5 35, 10 30 Z" fill="#292524" />
+                        <path d="M 25 22 L 35 24 M 45 28 L 50 35 M 65 20 L 55 24" stroke="#0c0a09" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </div>
+
+                    {/* Camera focal HUD */}
+                    <div className="absolute inset-4 border border-white/20 rounded-xl pointer-events-none flex items-center justify-center">
+                      <div className="w-6 h-6 border-t-2 border-l-2 border-white/60 absolute top-0 left-0" />
+                      <div className="w-6 h-6 border-t-2 border-r-2 border-white/60 absolute top-0 right-0" />
+                      <div className="w-6 h-6 border-b-2 border-l-2 border-white/60 absolute bottom-0 left-0" />
+                      <div className="w-6 h-6 border-b-2 border-r-2 border-white/60 absolute bottom-0 right-0" />
+                      
+                      {/* Scanning Laser Line */}
                       <motion.div
-                        className="absolute left-0 right-0 h-0.5 bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.8)] z-10"
-                        animate={{ top: ["10%", "90%", "10%"] }}
-                        transition={{ duration: 2.0, repeat: Infinity, ease: "easeInOut" }}
+                        className="absolute left-0 right-0 h-0.5 bg-emerald-500/80 shadow-[0_0_8px_rgba(16,185,129,0.8)]"
+                        animate={{ top: ["5%", "95%", "5%"] }}
+                        transition={{ duration: 3.0, repeat: Infinity, ease: "easeInOut" }}
                       />
-                      <div className="absolute bottom-2.5 bg-slate-950/80 px-2.5 py-0.5 rounded-full text-[8px] text-cyan-400 font-semibold flex items-center gap-1 border border-cyan-500/30">
-                        <Camera size={8} className="animate-pulse" />
-                        <span>AI Scanning...</span>
-                      </div>
                     </div>
 
-                    {/* Progress Card */}
-                    <div className="bg-white border border-gray-150 rounded-xl p-3 space-y-2.5 shadow-xs">
-                      <div>
-                        <div className="flex justify-between items-center text-[9px] font-bold text-gray-400 uppercase tracking-wide">
-                          <span>GPS Location</span>
-                          <span className="text-blue-600 animate-pulse">Locating...</span>
-                        </div>
-                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mt-1.5">
-                          <motion.div 
-                            className="h-full bg-blue-600 rounded-full" 
-                            animate={{ width: ["10%", "90%"] }}
-                            transition={{ duration: 2.0, repeat: Infinity }}
-                          />
-                        </div>
-                      </div>
-                      <div className="text-[10px] text-gray-500 font-medium">
-                        Analyzing street surface anomalies...
-                      </div>
+                    <div className="absolute bottom-3 bg-black/75 backdrop-blur-md px-3 py-1 rounded-full text-[7.5px] text-emerald-400 font-medium flex items-center gap-1.5 border border-emerald-500/20">
+                      <Camera size={8} className="animate-pulse" />
+                      <span>{scanState}</span>
                     </div>
                   </div>
 
-                  {/* Disabled Footer */}
-                  <div className="bg-white border-t border-gray-150 p-2.5">
-                    <div className="w-full bg-gray-200 text-gray-400 py-2 rounded-xl text-center text-[11px] font-bold">
-                      Scanning Hazard...
+                  {/* Diagnostic Progress HUD */}
+                  <div className="bg-white border border-gray-150 rounded-xl p-3 space-y-2 shadow-xs">
+                    <div className="flex justify-between items-center text-[7.5px] font-semibold text-gray-400 uppercase tracking-wide">
+                      <span>Diagnostic Feed</span>
+                      <span className="text-slate-700 animate-pulse font-bold">Locking...</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                        <motion.div 
+                          className="h-full bg-slate-800 rounded-full" 
+                          animate={{ width: ["15%", "100%"] }}
+                          transition={{ duration: 4.0, repeat: Infinity, ease: "linear" }}
+                        />
+                      </div>
+                      <p className="text-[8.5px] text-gray-500 font-medium">
+                        Synthesizing geographic mapping vectors...
+                      </p>
                     </div>
                   </div>
-                </>
+                </motion.div>
               )}
 
               {mobileStage === 2 && (
-                <>
-                  <div className="flex-1 p-3 space-y-3 overflow-y-auto">
-                    {/* Bounding box confirmed photo preview */}
-                    <div className="relative h-32 bg-slate-900 rounded-xl overflow-hidden flex items-center justify-center border border-gray-200 shadow-sm">
-                      {/* Photo preview */}
-                      <div className="absolute inset-0 bg-slate-800 flex flex-col items-center justify-center">
-                        <div className="w-24 h-12 bg-slate-700 rounded-full blur-md opacity-60" />
-                        <div className="w-16 h-8 bg-slate-900 rounded-full blur-xs opacity-90 -mt-6 border border-dashed border-red-500/40" />
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex-1 p-3.5 space-y-3 overflow-y-auto flex flex-col justify-between"
+                >
+                  <div className="space-y-3.5">
+                    {/* Confirmed photo preview */}
+                    <div className="relative h-24 bg-slate-900 rounded-xl overflow-hidden flex items-center justify-center border border-gray-200/50 shadow-sm">
+                      {/* Live road simulation background */}
+                      <div className="absolute inset-0 bg-[#57534e]">
+                        <div className="absolute inset-0 bg-[radial-gradient(#3e3c3a_1px,transparent_1px)] [background-size:12px_12px] opacity-40" />
+                        <div className="absolute inset-0 flex items-center justify-center opacity-60">
+                          <svg className="w-24 h-16" viewBox="0 0 100 60">
+                            <path d="M 10 30 C 15 15, 30 10, 50 12 C 70 14, 85 20, 90 35 C 80 48, 60 52, 40 48 Z" fill="#292524" />
+                          </svg>
+                        </div>
                       </div>
                       {/* AI Bounding box indicator */}
-                      <div className="absolute border-2 border-green-500 bg-green-500/10 w-28 h-16 rounded-md flex items-start p-1">
-                        <span className="bg-green-500 text-[6px] text-white px-1 py-0.5 rounded font-bold uppercase tracking-wider">Pothole (98%)</span>
-                      </div>
-                      <div className="absolute bottom-2.5 bg-green-600 px-2.5 py-0.5 rounded-full text-[8px] text-white font-semibold flex items-center gap-1">
-                        <Check size={8} />
-                        <span>Analysis Complete</span>
+                      <div className="absolute border border-emerald-500 bg-emerald-500/10 w-20 h-12 rounded flex items-start p-0.5">
+                        <span className="bg-emerald-500 text-[5px] text-white px-0.5 py-0.2 rounded font-bold uppercase tracking-wider">Pothole (98%)</span>
                       </div>
                     </div>
 
-                    {/* Confirmed details card */}
+                    {/* Confirmed details card - progressive staggered animation */}
                     <div className="bg-white border border-gray-150 rounded-xl p-3 space-y-2.5 shadow-xs">
-                      <div>
-                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Category</span>
-                        <div className="flex items-center justify-between mt-0.5 bg-gray-50 border border-gray-100 rounded-lg p-1.5">
-                          <span className="text-[10px] font-semibold text-gray-900">Road Pothole</span>
-                          <Check size={10} className="text-green-600" />
+                      <motion.div 
+                        initial={{ opacity: 0, x: -5 }} 
+                        animate={{ opacity: 1, x: 0 }} 
+                        transition={{ delay: 0.1 }}
+                        className="space-y-0.5"
+                      >
+                        <span className="text-[7.5px] font-bold text-gray-400 uppercase tracking-wide">Category</span>
+                        <div className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-lg p-1.5">
+                          <span className="text-[9px] font-medium text-gray-900">Road Pothole</span>
+                          <Check size={8} className="text-emerald-600" />
                         </div>
-                      </div>
-                      <div>
-                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Location</span>
-                        <div className="flex items-center gap-1 mt-0.5 bg-gray-50 border border-gray-100 rounded-lg p-1.5">
-                          <MapPin size={10} className="text-gray-400" />
-                          <span className="text-[10px] text-gray-700 font-medium truncate">142 Main St (Downtown)</span>
+                      </motion.div>
+                      
+                      <motion.div 
+                        initial={{ opacity: 0, x: -5 }} 
+                        animate={{ opacity: 1, x: 0 }} 
+                        transition={{ delay: 0.2 }}
+                        className="space-y-0.5"
+                      >
+                        <span className="text-[7.5px] font-bold text-gray-400 uppercase tracking-wide">Location</span>
+                        <div className="flex items-center gap-1 bg-gray-50 border border-gray-100 rounded-lg p-1.5">
+                          <MapPin size={8} className="text-gray-400" />
+                          <span className="text-[9px] text-gray-600 font-medium truncate">142 Main St (Downtown)</span>
                         </div>
-                      </div>
+                      </motion.div>
                     </div>
                   </div>
 
                   {/* Active Submit Footer */}
-                  <div className="bg-white border-t border-gray-150 p-2.5">
-                    <div className="w-full bg-[#1e3a6e] hover:bg-[#1a2e5a] text-white py-2 rounded-xl text-center text-[11px] font-bold shadow-md cursor-pointer transition-colors duration-200 animate-pulse">
+                  <motion.div 
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                  >
+                    <div className="w-full bg-[#1e2022] hover:bg-black text-[#fafafa] py-2 rounded-xl text-center text-[10px] font-semibold shadow-md cursor-pointer transition-colors duration-200">
                       Submit Report
                     </div>
-                  </div>
-                </>
+                  </motion.div>
+                </motion.div>
               )}
 
               {mobileStage === 3 && (
-                <>
-                  <div className="flex-1 p-4 flex flex-col items-center justify-center text-center space-y-4">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex-1 p-4 flex flex-col items-center justify-between text-center"
+                >
+                  <div className="flex-1 flex flex-col items-center justify-center space-y-4">
                     {/* Success icon check animation */}
-                    <div className="relative w-16 h-16 bg-green-50 rounded-full flex items-center justify-center border-2 border-green-200">
-                      <CheckCircle2 size={36} className="text-green-600" />
-                      <div className="absolute inset-0 bg-green-500 rounded-full scale-105 opacity-10 animate-ping" />
+                    <div className="relative w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center border border-emerald-100">
+                      <CheckCircle2 size={24} className="text-emerald-600" />
+                      <div className="absolute inset-0 bg-emerald-500 rounded-full scale-105 opacity-10 animate-ping" />
                     </div>
 
-                    <div className="space-y-1.5">
-                      <h3 className="text-xs font-bold text-gray-900 animate-bounce">Report Approved!</h3>
-                      <p className="text-[10px] text-gray-500 leading-relaxed max-w-[160px] mx-auto">
-                        Your issue has been logged, verified, and sent to City Hall.
+                    <div className="space-y-1">
+                      <h3 className="text-xs font-semibold text-gray-900">Report Approved</h3>
+                      <p className="text-[9px] text-gray-500 leading-relaxed max-w-[150px] mx-auto">
+                        Logged, classified, and routed to City Operations department.
                       </p>
                     </div>
 
                     {/* Dispatch metadata badge */}
-                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-2.5 w-full space-y-1">
-                      <div className="flex justify-between items-center text-[9px]">
-                        <span className="text-gray-500">Reference ID:</span>
-                        <span className="font-bold text-blue-900">#CIV-48902</span>
+                    <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 w-full space-y-1">
+                      <div className="flex justify-between items-center text-[8.5px]">
+                        <span className="text-gray-400">Reference ID:</span>
+                        <span className="font-semibold text-slate-800">#CIV-48902</span>
                       </div>
-                      <div className="flex justify-between items-center text-[9px]">
-                        <span className="text-gray-500">Status:</span>
-                        <span className="font-bold text-green-600">Dispatched</span>
+                      <div className="flex justify-between items-center text-[8.5px]">
+                        <span className="text-gray-400">Status:</span>
+                        <span className="font-semibold text-emerald-600">Dispatched</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Completed Track Footer */}
-                  <div className="bg-white border-t border-gray-150 p-2.5">
-                    <div className="w-full bg-green-600 text-white py-2 rounded-xl text-center text-[11px] font-bold shadow-sm">
-                      Tracking Progress...
-                    </div>
+                  <div className="w-full bg-emerald-600 text-[#fafafa] py-2 rounded-xl text-center text-[10px] font-semibold shadow-sm">
+                    Tracking Dispatch
                   </div>
-                </>
+                </motion.div>
               )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <motion.div className="absolute inset-0 bg-black pointer-events-none z-15" style={{ opacity: mapDimOpacity }} />
 
       {/* ─── Scene 7: Beautiful Statistics Overlay ─── */}
       <AnimatePresence>

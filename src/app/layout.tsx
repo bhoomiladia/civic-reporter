@@ -17,8 +17,8 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "CIVC Reporter — Report Civic Issues",
-    template: "%s | CIVC Reporter",
+    default: "CIVIC Reporter — Report Civic Issues",
+    template: "%s | CIVIC Reporter",
   },
   description:
     "Report and track civic issues in your community. From potholes to broken streetlights, make your neighborhood better.",

@@ -5,7 +5,8 @@ import { motion, useScroll, useTransform, useSpring } from "framer-motion";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { StorytellingMap } from "./storytelling-map";
-import { ArrowRight, Shield } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import { Logo } from "@/components/shared/logo";
 
 const SCENES = [
   {
@@ -91,11 +92,9 @@ export function ScrollStory() {
       >
         <div className="max-w-[1240px] mx-auto px-5 sm:px-8 h-[60px] flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 rounded-lg bg-blue-900 flex items-center justify-center transition-transform duration-200 group-hover:scale-105">
-              <Shield size={15} className="text-white" />
-            </div>
+            <Logo size={42} className="transition-transform duration-200 group-hover:scale-105" />
             <span className="font-semibold text-gray-900 text-[15px] tracking-[-0.02em]">
-              CIVC Reporter
+              CIVIC Reporter
             </span>
           </Link>
           <nav className="hidden sm:flex items-center gap-1">
