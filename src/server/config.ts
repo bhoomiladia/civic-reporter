@@ -2,12 +2,21 @@
 // Server-side Configuration
 // ============================================
 
+function formatPrivateKey(key: string | undefined): string {
+  if (!key) return '';
+  let cleaned = key.trim();
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1);
+  }
+  return cleaned.replace(/\\n/g, '\n').trim();
+}
+
 export const serverConfig = {
   env: process.env.NODE_ENV || 'development',
 
   firebase: {
     projectId: process.env.FIREBASE_PROJECT_ID || '',
-    privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+    privateKey: formatPrivateKey(process.env.FIREBASE_PRIVATE_KEY),
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
     storageBucket: process.env.FIREBASE_STORAGE_BUCKET || '',
     databaseUrl: process.env.FIREBASE_DATABASE_URL || '',

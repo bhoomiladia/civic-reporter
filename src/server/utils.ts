@@ -188,7 +188,8 @@ export function withErrorHandler(handler: RouteHandler): RouteHandler {
         return errorResponse(err.statusCode, err.code, err.message, err.details);
       }
       console.error('[API Error]', error);
-      return errorResponse(500, 'INTERNAL_ERROR', 'An unexpected error occurred');
+      const message = (error as Error)?.message || 'An unexpected error occurred';
+      return errorResponse(500, 'INTERNAL_ERROR', message);
     }
   };
 }

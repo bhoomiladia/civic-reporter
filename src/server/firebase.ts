@@ -17,30 +17,28 @@ function initializeFirebase(): App {
     firebaseApp = existingApps.length > 0
       ? existingApps[0]!
       : (() => {
-          if (
-            serverConfig.firebase.projectId &&
-            serverConfig.firebase.privateKey &&
-            serverConfig.firebase.clientEmail
-          ) {
+          const { projectId, privateKey, clientEmail, storageBucket, databaseUrl } = serverConfig.firebase;
+          if (projectId && privateKey && clientEmail) {
             return initializeApp({
               credential: cert({
-                projectId: serverConfig.firebase.projectId,
-                privateKey: serverConfig.firebase.privateKey,
-                clientEmail: serverConfig.firebase.clientEmail,
+                projectId,
+                privateKey,
+                clientEmail,
               }),
-              storageBucket: serverConfig.firebase.storageBucket,
-              databaseURL: serverConfig.firebase.databaseUrl,
+              storageBucket: storageBucket || undefined,
+              databaseURL: databaseUrl || undefined,
             });
           } else {
+            console.warn('[Firebase] Warning: FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, or FIREBASE_CLIENT_EMAIL is missing in environment variables.');
             return initializeApp({
-              projectId: serverConfig.firebase.projectId || 'civic-reporter-dev',
+              projectId: projectId || 'civic-reporter-dev',
             });
           }
         })();
 
     return firebaseApp;
   } catch (error) {
-    console.error('[Firebase] Failed to initialize:', error);
+    console.error('[Firebase] Failed to initialize Firebase Admin SDK:', error);
     throw error;
   }
 }
