@@ -6,17 +6,35 @@ import { MediaRepository } from '@/server/repositories';
 
 const mediaRepo = new MediaRepository();
 
+async function saveFile(buffer: Buffer, filename: string, mimeType: string): Promise<string> {
+  const fileId = generateId();
+  const ext = filename.split('.').pop() || 'jpg';
+
+  // Try writing locally if not running on Vercel serverless
+  if (!process.env.VERCEL) {
+    try {
+      const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+      await fs.mkdir(uploadDir, { recursive: true });
+      const relativePath = `/uploads/${fileId}.${ext}`;
+      const absolutePath = path.join(uploadDir, `${fileId}.${ext}`);
+      await fs.writeFile(absolutePath, buffer);
+      return relativePath;
+    } catch (e) {
+      console.warn('[Upload] Local filesystem write failed, falling back to data URL:', e);
+    }
+  }
+
+  // Fallback to Base64 Data URL for serverless production environment (Vercel read-only filesystem)
+  return `data:${mimeType};base64,${buffer.toString('base64')}`;
+}
+
 /**
- * POST /api/upload — Upload a file (image) to local filesystem inside public/uploads
+ * POST /api/upload — Upload a file (image)
  * Accepts multipart/form-data or base64 JSON payload
  */
 export const POST = withErrorHandler(async (request) => {
   const user = await authenticateRequest(request);
   const contentType = request.headers.get('content-type') || '';
-  const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-
-  // Ensure directory exists
-  await fs.mkdir(uploadDir, { recursive: true });
 
   if (contentType.includes('application/json')) {
     // Base64 upload
@@ -37,26 +55,20 @@ export const POST = withErrorHandler(async (request) => {
       throw AppError.badRequest(`File too large. Max size: ${serverConfig.upload.maxFileSizeMb}MB`);
     }
 
-    const fileId = generateId();
-    const ext = filename.split('.').pop() || 'jpg';
-    const relativePath = `/uploads/${fileId}.${ext}`;
-    const absolutePath = path.join(uploadDir, `${fileId}.${ext}`);
-
-    // Write file to local disk
-    await fs.writeFile(absolutePath, buffer);
+    const fileUrl = await saveFile(buffer, filename, mimeType);
 
     // Save media record
     const media = await mediaRepo.create({
       issueId,
       userId: user.userId,
-      url: relativePath,
+      url: fileUrl,
       filename,
       mimeType,
       sizeBytes: buffer.length,
-      storagePath: relativePath,
+      storagePath: fileUrl,
     } as any);
 
-    return successResponse({ url: relativePath, media }, 'File uploaded locally', 201);
+    return successResponse({ url: fileUrl, media }, 'File uploaded successfully', 201);
   }
 
   // FormData uploads
@@ -75,25 +87,18 @@ export const POST = withErrorHandler(async (request) => {
     throw AppError.badRequest(`File too large. Max size: ${serverConfig.upload.maxFileSizeMb}MB`);
   }
 
-  const fileId = generateId();
-  const ext = file.name.split('.').pop() || 'jpg';
-  const relativePath = `/uploads/${fileId}.${ext}`;
-  const absolutePath = path.join(uploadDir, `${fileId}.${ext}`);
-
   const buffer = Buffer.from(await file.arrayBuffer());
-  
-  // Write file to local disk
-  await fs.writeFile(absolutePath, buffer);
+  const fileUrl = await saveFile(buffer, file.name, file.type);
 
   const media = await mediaRepo.create({
     issueId,
     userId: user.userId,
-    url: relativePath,
+    url: fileUrl,
     filename: file.name,
     mimeType: file.type,
     sizeBytes: file.size,
-    storagePath: relativePath,
+    storagePath: fileUrl,
   } as any);
 
-  return successResponse({ url: relativePath, media }, 'File uploaded locally', 201);
+  return successResponse({ url: fileUrl, media }, 'File uploaded successfully', 201);
 });
