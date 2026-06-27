@@ -3,7 +3,6 @@ import path from 'path';
 import { withErrorHandler, successResponse, authenticateRequest, AppError, generateId } from '@/server/utils';
 import { serverConfig } from '@/server/config';
 import { MediaRepository } from '@/server/repositories';
-import { getStorage } from '@/server/firebase';
 
 const mediaRepo = new MediaRepository();
 
@@ -11,7 +10,7 @@ async function saveFile(buffer: Buffer, filename: string, mimeType: string): Pro
   const fileId = generateId();
   const ext = filename.split('.').pop() || 'jpg';
 
-  // 1. Try local disk write if running locally (not on Vercel serverless)
+  // Try writing locally if not running on Vercel serverless
   if (!process.env.VERCEL) {
     try {
       const uploadDir = path.join(process.cwd(), 'public', 'uploads');
@@ -21,32 +20,12 @@ async function saveFile(buffer: Buffer, filename: string, mimeType: string): Pro
       await fs.writeFile(absolutePath, buffer);
       return relativePath;
     } catch (e) {
-      console.warn('[Upload] Local disk write failed:', e);
+      console.warn('[Upload] Local filesystem write failed, falling back to data URL:', e);
     }
   }
 
-  // 2. Try uploading to Firebase Storage if storage bucket is configured
-  const bucketName = serverConfig.firebase.storageBucket;
-  if (bucketName) {
-    try {
-      const bucket = getStorage().bucket(bucketName);
-      const destination = `uploads/${fileId}.${ext}`;
-      const fileRef = bucket.file(destination);
-
-      await fileRef.save(buffer, {
-        metadata: { contentType: mimeType },
-      });
-
-      // Generate public download URL for Firebase Storage
-      const encodedPath = encodeURIComponent(destination);
-      return `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodedPath}?alt=media`;
-    } catch (e) {
-      console.error('[Upload] Firebase Storage upload failed, using fallback:', e);
-    }
-  }
-
-  // 3. Fallback to high-quality cloud photo URL to prevent Firestore 1MB document size limit / 30s timeout
-  return `https://images.unsplash.com/photo-1572949645841-094f3a9c4c94?auto=format&fit=crop&w=800&q=80`;
+  // Fallback to Base64 Data URL for serverless production environment (Vercel read-only filesystem)
+  return `data:${mimeType};base64,${buffer.toString('base64')}`;
 }
 
 /**
@@ -60,21 +39,23 @@ export const POST = withErrorHandler(async (request) => {
   if (contentType.includes('application/json')) {
     // Base64 upload
     const body = await request.json();
-    const { base64, file: base64File, filename, mimeType, issueId } = body;
-    const actualBase64 = base64 || base64File;
+    const { base64, filename, mimeType, issueId } = body;
 
-    if (!actualBase64 || !filename) {
-      throw AppError.badRequest('base64/file and filename are required');
+    if (!base64 || !filename || !mimeType) {
+      throw AppError.badRequest('base64, filename, and mimeType are required');
     }
 
-    const actualMimeType = mimeType || 'image/jpeg';
-    const buffer = Buffer.from(actualBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+    if (!serverConfig.upload.allowedFileTypes.includes(mimeType)) {
+      throw AppError.badRequest(`File type ${mimeType} is not allowed`);
+    }
+
+    const buffer = Buffer.from(base64, 'base64');
     const sizeMb = buffer.length / (1024 * 1024);
     if (sizeMb > serverConfig.upload.maxFileSizeMb) {
       throw AppError.badRequest(`File too large. Max size: ${serverConfig.upload.maxFileSizeMb}MB`);
     }
 
-    const fileUrl = await saveFile(buffer, filename, actualMimeType);
+    const fileUrl = await saveFile(buffer, filename, mimeType);
 
     // Save media record
     const media = await mediaRepo.create({
@@ -82,7 +63,7 @@ export const POST = withErrorHandler(async (request) => {
       userId: user.userId,
       url: fileUrl,
       filename,
-      mimeType: actualMimeType,
+      mimeType,
       sizeBytes: buffer.length,
       storagePath: fileUrl,
     } as any);
@@ -97,20 +78,24 @@ export const POST = withErrorHandler(async (request) => {
 
   if (!file) throw AppError.badRequest('No file provided');
 
+  if (!serverConfig.upload.allowedFileTypes.includes(file.type)) {
+    throw AppError.badRequest(`File type ${file.type} is not allowed`);
+  }
+
   const sizeMb = file.size / (1024 * 1024);
   if (sizeMb > serverConfig.upload.maxFileSizeMb) {
     throw AppError.badRequest(`File too large. Max size: ${serverConfig.upload.maxFileSizeMb}MB`);
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const fileUrl = await saveFile(buffer, file.name, file.type || 'image/jpeg');
+  const fileUrl = await saveFile(buffer, file.name, file.type);
 
   const media = await mediaRepo.create({
     issueId,
     userId: user.userId,
     url: fileUrl,
     filename: file.name,
-    mimeType: file.type || 'image/jpeg',
+    mimeType: file.type,
     sizeBytes: file.size,
     storagePath: fileUrl,
   } as any);
