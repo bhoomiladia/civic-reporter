@@ -351,7 +351,7 @@ export default function AdminDashboardPage() {
                     </td>
                     <td className="py-4 text-right">
                       <Link href={`/issues/${issue.id}`}>
-                        <Button size="xs" variant="outline" className="h-7 text-xs border-gray-200">
+                        <Button size="sm" variant="outline" className="h-7 text-xs border-gray-200">
                           Route
                           <ArrowUpRight size={12} className="ml-1" />
                         </Button>

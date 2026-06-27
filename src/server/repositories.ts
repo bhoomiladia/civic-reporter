@@ -225,22 +225,49 @@ export class IssueRepository extends BaseRepository<IIssue> {
   }
 
   async findByUser(userId: string, limit = 50): Promise<IIssue[]> {
-    const snap = await this.collection
-      .where('reportedBy', '==', userId).orderBy('createdAt', 'desc').limit(limit).get();
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as IIssue));
+    try {
+      const snap = await this.collection
+        .where('reportedBy', '==', userId).orderBy('createdAt', 'desc').limit(limit).get();
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as IIssue));
+    } catch (e) {
+      console.warn("Index missing for findByUser, falling back to in-memory filtering");
+      const snap = await this.collection.where('reportedBy', '==', userId).get();
+      const issues = snap.docs.map((d) => ({ id: d.id, ...d.data() } as IIssue));
+      return issues
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, limit);
+    }
   }
 
   async findByStatus(status: IssueStatus, limit = 50): Promise<IIssue[]> {
-    const snap = await this.collection
-      .where('status', '==', status).orderBy('createdAt', 'desc').limit(limit).get();
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as IIssue));
+    try {
+      const snap = await this.collection
+        .where('status', '==', status).orderBy('createdAt', 'desc').limit(limit).get();
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as IIssue));
+    } catch (e) {
+      console.warn("Index missing for findByStatus, falling back to in-memory filtering");
+      const snap = await this.collection.where('status', '==', status).get();
+      const issues = snap.docs.map((d) => ({ id: d.id, ...d.data() } as IIssue));
+      return issues
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, limit);
+    }
   }
 
   async findTrending(limit = 10): Promise<IIssue[]> {
-    const snap = await this.collection
-      .where('status', 'in', ['reported', 'acknowledged', 'in_progress'])
-      .orderBy('upvotes', 'desc').limit(limit).get();
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as IIssue));
+    try {
+      const snap = await this.collection
+        .where('status', 'in', ['reported', 'acknowledged', 'in_progress'])
+        .orderBy('upvotes', 'desc').limit(limit).get();
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as IIssue));
+    } catch (e) {
+      console.warn("Index missing for findTrending, falling back to in-memory filtering");
+      const snap = await this.collection.where('status', 'in', ['reported', 'acknowledged', 'in_progress']).get();
+      const issues = snap.docs.map((d) => ({ id: d.id, ...d.data() } as IIssue));
+      return issues
+        .sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0))
+        .slice(0, limit);
+    }
   }
 
   async updateStatus(id: string, status: IssueStatus, extra?: Partial<IIssue>): Promise<IIssue | null> {
@@ -265,9 +292,22 @@ export class IssueRepository extends BaseRepository<IIssue> {
   }
 
   async getRecentlyResolved(limit = 10): Promise<IIssue[]> {
-    const snap = await this.collection
-      .where('status', '==', 'resolved').orderBy('resolvedAt', 'desc').limit(limit).get();
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as IIssue));
+    try {
+      const snap = await this.collection
+        .where('status', '==', 'resolved').orderBy('resolvedAt', 'desc').limit(limit).get();
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as IIssue));
+    } catch (e) {
+      console.warn("Index missing for getRecentlyResolved, falling back to in-memory filtering");
+      const snap = await this.collection.where('status', '==', 'resolved').get();
+      const issues = snap.docs.map((d) => ({ id: d.id, ...d.data() } as IIssue));
+      return issues
+        .sort((a, b) => {
+          const aTime = a.resolvedAt ? new Date(a.resolvedAt).getTime() : 0;
+          const bTime = b.resolvedAt ? new Date(b.resolvedAt).getTime() : 0;
+          return bTime - aTime;
+        })
+        .slice(0, limit);
+    }
   }
 
   async incrementVote(id: string, type: 'upvote' | 'downvote') {
