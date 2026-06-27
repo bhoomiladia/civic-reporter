@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['firebase-admin', 'jwks-rsa', 'jose'],
+  transpilePackages: ['jose', 'jwks-rsa', 'firebase-admin'],
   async headers() {
     return [
       {
