@@ -10,8 +10,8 @@ import {
   Map,
   MapPin,
   Users,
-  BarChart3,
-  Settings,
+  Clock,
+  User,
   Shield,
 } from "lucide-react";
 import { Logo } from "@/components/shared/logo";
@@ -19,11 +19,11 @@ import { useAuth } from "@/contexts/auth-context";
 
 const sidebarItems = [
   { id: "home", label: "Home", href: "/", icon: Home },
-  { id: "map", label: "Map", href: "/map", icon: Map },
+  { id: "map", label: "Explore Map", href: "/map", icon: Map },
   { id: "report", label: "Report", href: "/report", icon: MapPin },
+  { id: "issues", label: "Track", href: "/issues", icon: Clock },
   { id: "community", label: "Community", href: "/community", icon: Users },
-  { id: "issues", label: "Dashboard", href: "/issues", icon: BarChart3 },
-  { id: "profile", label: "Settings", href: "/profile", icon: Settings },
+  { id: "profile", label: "Profile", href: "/profile", icon: User },
 ];
 
 export function Sidebar() {

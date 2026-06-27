@@ -10,12 +10,15 @@ import {
   PlusCircle,
   Users,
   User,
+  Home,
+  Clock,
 } from "lucide-react";
 
 const iconComponents: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+  home: Home,
   map: Map,
-  list: List,
   "plus-circle": PlusCircle,
+  clock: Clock,
   users: Users,
   user: User,
 };

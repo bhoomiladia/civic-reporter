@@ -11,10 +11,14 @@ export const USER_ROLES: Record<UserRole, { label: string; level: number }> = {
 
 export const ISSUE_STATUSES: Record<IssueStatus, { label: string; color: string }> = {
   reported: { label: 'Reported', color: '#2563eb' },
-  acknowledged: { label: 'Acknowledged', color: '#7c3aed' },
-  in_progress: { label: 'In Progress', color: '#d97706' },
-  resolved: { label: 'Resolved', color: '#16a34a' },
-  closed: { label: 'Closed', color: '#737373' },
+  verification: { label: 'Community Verification', color: '#6366f1' },
+  verified: { label: 'Verified', color: '#06b6d4' },
+  review: { label: 'Municipality Review', color: '#8b5cf6' },
+  assigned: { label: 'Assigned', color: '#f59e0b' },
+  dispatched: { label: 'Crew Dispatched', color: '#ef4444' },
+  repair: { label: 'Repair In Progress', color: '#f97316' },
+  resolved: { label: 'Resolved', color: '#10b981' },
+  closed: { label: 'Closed', color: '#6b7280' },
 };
 
 export const ISSUE_PRIORITIES: Record<IssuePriority, { label: string; value: number }> = {
@@ -43,10 +47,14 @@ export const ISSUE_CATEGORIES: Record<
 
 /** Valid status transitions for issue lifecycle */
 export const STATUS_TRANSITIONS: Record<IssueStatus, IssueStatus[]> = {
-  reported: ['acknowledged', 'closed'],
-  acknowledged: ['in_progress', 'closed'],
-  in_progress: ['resolved', 'acknowledged'],
-  resolved: ['closed', 'in_progress'],
+  reported: ['verification', 'review', 'closed'],
+  verification: ['verified', 'closed'],
+  verified: ['review', 'closed'],
+  review: ['assigned', 'closed'],
+  assigned: ['dispatched', 'closed'],
+  dispatched: ['repair', 'closed'],
+  repair: ['resolved', 'closed'],
+  resolved: ['closed', 'repair'],
   closed: ['reported'],
 };
 

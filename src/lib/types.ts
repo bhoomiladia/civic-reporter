@@ -1,7 +1,11 @@
 export type IssueStatus =
   | "reported"
-  | "acknowledged"
-  | "in_progress"
+  | "verification"
+  | "verified"
+  | "review"
+  | "assigned"
+  | "dispatched"
+  | "repair"
   | "resolved"
   | "closed";
 

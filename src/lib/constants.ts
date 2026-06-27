@@ -99,24 +99,21 @@ export const STATUS_CONFIG: Record<
   { label: string; color: string; bgColor: string }
 > = {
   reported: { label: "Reported", color: "#2563eb", bgColor: "#eff6ff" },
-  acknowledged: {
-    label: "Acknowledged",
-    color: "#7c3aed",
-    bgColor: "#f5f3ff",
-  },
-  in_progress: {
-    label: "In Progress",
-    color: "#d97706",
-    bgColor: "#fffbeb",
-  },
-  resolved: { label: "Resolved", color: "#16a34a", bgColor: "#f0fdf4" },
-  closed: { label: "Closed", color: "#737373", bgColor: "#f5f5f5" },
+  verification: { label: "Community Verification", color: "#6366f1", bgColor: "#e0e7ff" },
+  verified: { label: "Verified", color: "#06b6d4", bgColor: "#ecfeff" },
+  review: { label: "Municipality Review", color: "#8b5cf6", bgColor: "#f5f3ff" },
+  assigned: { label: "Assigned", color: "#f59e0b", bgColor: "#fef3c7" },
+  dispatched: { label: "Crew Dispatched", color: "#ef4444", bgColor: "#fee2e2" },
+  repair: { label: "Repair In Progress", color: "#f97316", bgColor: "#ffedd5" },
+  resolved: { label: "Resolved", color: "#10b981", bgColor: "#d1fae5" },
+  closed: { label: "Closed", color: "#6b7280", bgColor: "#f3f4f6" },
 };
 
 export const NAV_ITEMS = [
-  { label: "Map", href: "/map", icon: "map" },
-  { label: "Issues", href: "/issues", icon: "list" },
+  { label: "Home", href: "/", icon: "home" },
+  { label: "Explore Map", href: "/map", icon: "map" },
   { label: "Report", href: "/report", icon: "plus-circle" },
+  { label: "Track", href: "/issues", icon: "clock" },
   { label: "Community", href: "/community", icon: "users" },
   { label: "Profile", href: "/profile", icon: "user" },
 ] as const;

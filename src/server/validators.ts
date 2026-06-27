@@ -68,7 +68,7 @@ export const createIssueSchema = z.object({
   priority: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
   severity: z.enum(['minor', 'moderate', 'major', 'severe']).optional(),
   location: geoLocationSchema,
-  photos: z.array(z.string().url()).max(10).optional(),
+  photos: z.array(z.string()).max(10).optional(),
   tags: z.array(z.string().max(50)).max(20).optional(),
 });
 
@@ -79,11 +79,11 @@ export const updateIssueSchema = z.object({
     'pothole', 'streetlight', 'graffiti', 'water_leak', 'sidewalk',
     'trash', 'noise', 'traffic_sign', 'drainage', 'park', 'other',
   ]).optional(),
-  status: z.enum(['reported', 'acknowledged', 'in_progress', 'resolved', 'closed']).optional(),
+  status: z.enum(['reported', 'verification', 'verified', 'review', 'assigned', 'dispatched', 'repair', 'resolved', 'closed']).optional(),
   priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
   severity: z.enum(['minor', 'moderate', 'major', 'severe']).optional(),
   location: geoLocationSchema.optional(),
-  photos: z.array(z.string().url()).max(10).optional(),
+  photos: z.array(z.string()).max(10).optional(),
   assignedTo: z.string().optional(),
   assignedMunicipality: z.string().optional(),
   estimatedResolution: z.coerce.date().optional(),
@@ -104,7 +104,7 @@ export const createCommentSchema = z.object({
 // ============================================
 
 export const voteSchema = z.object({
-  type: z.enum(['upvote', 'downvote']),
+  type: z.enum(['upvote', 'downvote', 'up', 'down']),
 });
 
 // ============================================

@@ -170,38 +170,126 @@ export class IssueRepository extends BaseRepository<IIssue> {
     filters: IIssueFilter, limit = 20, offset = 0,
     sortBy = 'createdAt', sortOrder: FirebaseFirestore.OrderByDirection = 'desc'
   ): Promise<{ data: IIssue[]; total: number }> {
-    let query: FirebaseFirestore.Query = this.collection;
+    try {
+      let query: FirebaseFirestore.Query = this.collection;
 
-    if (filters.category?.length && filters.category.length <= 10) {
-      query = query.where('category', 'in', filters.category);
+      // Clean empty string array items from filter splits
+      const cleanCategories = filters.category?.filter(Boolean);
+      const cleanStatuses = filters.status?.filter(Boolean);
+      const cleanPriorities = filters.priority?.filter(Boolean);
+
+      if (cleanCategories?.length) {
+        query = query.where('category', 'in', cleanCategories);
+      }
+      if (cleanStatuses?.length) {
+        query = query.where('status', 'in', cleanStatuses);
+      }
+      if (cleanPriorities?.length) {
+        query = query.where('priority', 'in', cleanPriorities);
+      }
+      if (filters.reportedBy) query = query.where('reportedBy', '==', filters.reportedBy);
+      if (filters.assignedTo) query = query.where('assignedTo', '==', filters.assignedTo);
+      if (filters.assignedMunicipality) query = query.where('assignedMunicipality', '==', filters.assignedMunicipality);
+      if (filters.isVerified !== undefined) query = query.where('isVerified', '==', filters.isVerified);
+      if (filters.dateFrom) query = query.where('createdAt', '>=', filters.dateFrom);
+      if (filters.dateTo) query = query.where('createdAt', '<=', filters.dateTo);
+
+      const countSnap = await query.count().get();
+      const total = countSnap.data().count;
+      const snap = await query.orderBy(sortBy, sortOrder).offset(offset).limit(limit).get();
+      let data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as IIssue));
+
+      // Client-side text search (Firestore has no full-text search)
+      if (filters.search) {
+        const q = filters.search.toLowerCase();
+        data = data.filter((i) =>
+          i.title.toLowerCase().includes(q) ||
+          i.description.toLowerCase().includes(q) ||
+          i.location.address.toLowerCase().includes(q) ||
+          (i.location.neighborhood?.toLowerCase().includes(q) ?? false)
+        );
+      }
+
+      return { data, total };
+
+    } catch (e) {
+      console.warn("Index missing or query error in findWithFilters, falling back to in-memory filtering", e);
+      
+      // Fetch all docs (or up to 1000) to perform in-memory filtering
+      const snap = await this.collection.get();
+      let allIssues = snap.docs.map((d) => ({ id: d.id, ...d.data() } as IIssue));
+
+      // 1. Apply category filter
+      const cleanCategories = filters.category?.filter(Boolean);
+      if (cleanCategories?.length) {
+        allIssues = allIssues.filter(i => cleanCategories.includes(i.category));
+      }
+
+      // 2. Apply status filter
+      const cleanStatuses = filters.status?.filter(Boolean);
+      if (cleanStatuses?.length) {
+        allIssues = allIssues.filter(i => cleanStatuses.includes(i.status));
+      }
+
+      // 3. Apply priority filter
+      const cleanPriorities = filters.priority?.filter(Boolean);
+      if (cleanPriorities?.length) {
+        allIssues = allIssues.filter(i => cleanPriorities.includes(i.priority));
+      }
+
+      // 4. Other basic filters
+      if (filters.reportedBy) {
+        allIssues = allIssues.filter(i => i.reportedBy === filters.reportedBy);
+      }
+      if (filters.assignedTo) {
+        allIssues = allIssues.filter(i => i.assignedTo === filters.assignedTo);
+      }
+      if (filters.assignedMunicipality) {
+        allIssues = allIssues.filter(i => i.assignedMunicipality === filters.assignedMunicipality);
+      }
+      if (filters.isVerified !== undefined) {
+        allIssues = allIssues.filter(i => i.isVerified === filters.isVerified);
+      }
+      if (filters.dateFrom) {
+        allIssues = allIssues.filter(i => new Date(i.createdAt).getTime() >= new Date(filters.dateFrom!).getTime());
+      }
+      if (filters.dateTo) {
+        allIssues = allIssues.filter(i => new Date(i.createdAt).getTime() <= new Date(filters.dateTo!).getTime());
+      }
+
+      // 5. Client-side text search
+      if (filters.search) {
+        const q = filters.search.toLowerCase();
+        allIssues = allIssues.filter((i) =>
+          i.title.toLowerCase().includes(q) ||
+          i.description.toLowerCase().includes(q) ||
+          i.location.address.toLowerCase().includes(q) ||
+          (i.location.neighborhood?.toLowerCase().includes(q) ?? false)
+        );
+      }
+
+      // 6. Sort
+      allIssues.sort((a, b) => {
+        let valA: any = a[sortBy as keyof IIssue] ?? '';
+        let valB: any = b[sortBy as keyof IIssue] ?? '';
+        
+        if (sortBy === 'createdAt' || sortBy === 'updatedAt') {
+          valA = new Date(valA).getTime();
+          valB = new Date(valB).getTime();
+        }
+
+        if (sortOrder === 'desc') {
+          return valA > valB ? -1 : valA < valB ? 1 : 0;
+        } else {
+          return valA < valB ? -1 : valA > valB ? 1 : 0;
+        }
+      });
+
+      const total = allIssues.length;
+      const data = allIssues.slice(offset, offset + limit);
+
+      return { data, total };
     }
-    if (filters.status?.length && filters.status.length <= 10) {
-      query = query.where('status', 'in', filters.status);
-    }
-    if (filters.reportedBy) query = query.where('reportedBy', '==', filters.reportedBy);
-    if (filters.assignedTo) query = query.where('assignedTo', '==', filters.assignedTo);
-    if (filters.assignedMunicipality) query = query.where('assignedMunicipality', '==', filters.assignedMunicipality);
-    if (filters.isVerified !== undefined) query = query.where('isVerified', '==', filters.isVerified);
-    if (filters.dateFrom) query = query.where('createdAt', '>=', filters.dateFrom);
-    if (filters.dateTo) query = query.where('createdAt', '<=', filters.dateTo);
-
-    const countSnap = await query.count().get();
-    const total = countSnap.data().count;
-    const snap = await query.orderBy(sortBy, sortOrder).offset(offset).limit(limit).get();
-    let data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as IIssue));
-
-    // Client-side text search (Firestore has no full-text search)
-    if (filters.search) {
-      const q = filters.search.toLowerCase();
-      data = data.filter((i) =>
-        i.title.toLowerCase().includes(q) ||
-        i.description.toLowerCase().includes(q) ||
-        i.location.address.toLowerCase().includes(q) ||
-        (i.location.neighborhood?.toLowerCase().includes(q) ?? false)
-      );
-    }
-
-    return { data, total };
   }
 
   async findNearby(lat: number, lng: number, radiusKm = 5, limit = 50): Promise<IIssue[]> {
@@ -314,7 +402,12 @@ export class IssueRepository extends BaseRepository<IIssue> {
     await this.increment(id, type === 'upvote' ? 'upvotes' : 'downvotes', 1);
   }
   async decrementVote(id: string, type: 'upvote' | 'downvote') {
-    await this.increment(id, type === 'upvote' ? 'upvotes' : 'downvotes', -1);
+    const issue = await this.findById(id);
+    if (!issue) return;
+    const current = type === 'upvote' ? (issue.upvotes || 0) : (issue.downvotes || 0);
+    if (current > 0) {
+      await this.increment(id, type === 'upvote' ? 'upvotes' : 'downvotes', -1);
+    }
   }
   async incrementCommentCount(id: string) { await this.increment(id, 'commentCount', 1); }
   async decrementCommentCount(id: string) { await this.increment(id, 'commentCount', -1); }
@@ -436,9 +529,21 @@ export class TimelineEventRepository extends BaseRepository<ITimelineEvent> {
   constructor() { super(Collections.ISSUE_HISTORY); }
 
   async findByIssue(issueId: string): Promise<ITimelineEvent[]> {
-    const snap = await this.collection
-      .where('issueId', '==', issueId).orderBy('createdAt', 'asc').get();
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ITimelineEvent));
+    try {
+      const snap = await this.collection
+        .where('issueId', '==', issueId).orderBy('createdAt', 'asc').get();
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ITimelineEvent));
+    } catch (e) {
+      console.warn("Index missing for findByIssue, falling back to in-memory sorting", e);
+      const snap = await this.collection
+        .where('issueId', '==', issueId).get();
+      const events = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ITimelineEvent));
+      return events.sort((a, b) => {
+        const ad = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bd = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return ad - bd;
+      });
+    }
   }
 
   async getRecentActivity(limit = 20): Promise<ITimelineEvent[]> {

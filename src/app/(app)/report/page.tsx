@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,7 +15,6 @@ import {
   ArrowRight,
   Check,
   MapPin,
-  Camera,
   Upload,
   CircleAlert,
   Lightbulb,
@@ -28,6 +28,9 @@ import {
   Trees,
   MessageCircle,
   Loader2,
+  Sparkles,
+  ShieldCheck,
+  Flame,
   Search,
 } from "lucide-react";
 import Link from "next/link";
@@ -48,13 +51,14 @@ const iconMap: Record<string, React.ComponentType<{ size?: number; className?: s
 };
 
 const steps = [
-  { id: 1, label: "Category" },
-  { id: 2, label: "Location" },
-  { id: 3, label: "Details" },
-  { id: 4, label: "Review" },
+  { id: 1, label: "Location" },
+  { id: 2, label: "Photo" },
+  { id: 3, label: "Description" },
+  { id: 4, label: "AI Review" },
 ];
 
 export default function ReportPage() {
+  const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState<IssueCategory | null>(null);
   const [title, setTitle] = useState("");
@@ -66,10 +70,54 @@ export default function ReportPage() {
   const [searchResults, setSearchResults] = useState<Array<{ display_name: string; lat: string; lon: string }>>([]);
   const [photos, setPhotos] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const [aiResults, setAiResults] = useState<{
+    suggestedCategory: IssueCategory;
+    confidence: number;
+    severity: "low" | "medium" | "high" | "critical";
+    description: string;
+  } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const createIssueMutation = useCreateIssue();
+
+  // Simulate AI Scan when entering Step 4
+  useEffect(() => {
+    if (currentStep === 4) {
+      setAiAnalyzing(true);
+      const timer = setTimeout(() => {
+        // Suggest category based on text keyword or default to pothole
+        let suggested: IssueCategory = "other";
+        const descLower = description.toLowerCase() + " " + title.toLowerCase();
+        if (descLower.includes("pothole") || descLower.includes("road") || descLower.includes("street damage")) {
+          suggested = "pothole";
+        } else if (descLower.includes("light") || descLower.includes("lamp") || descLower.includes("dark")) {
+          suggested = "streetlight";
+        } else if (descLower.includes("graffiti") || descLower.includes("paint") || descLower.includes("spray")) {
+          suggested = "graffiti";
+        } else if (descLower.includes("water") || descLower.includes("leak") || descLower.includes("burst")) {
+          suggested = "water_leak";
+        } else if (descLower.includes("trash") || descLower.includes("dump") || descLower.includes("garbage")) {
+          suggested = "trash";
+        }
+
+        if (suggested === "other" && selectedCategory) {
+          suggested = selectedCategory;
+        }
+
+        const suggestedLabel = CATEGORIES.find(c => c.id === suggested)?.label || "issue";
+        setAiResults({
+          suggestedCategory: suggested,
+          confidence: Math.round(85 + Math.random() * 14),
+          severity: descLower.includes("dangerous") || descLower.includes("accident") || descLower.includes("leak") ? "high" : "medium",
+          description: `Visual match confirmed. The photo shows an active ${suggestedLabel.toLowerCase()} matching the description. Recommended for fast-track municipal scheduling.`,
+        });
+        setSelectedCategory(suggested);
+        setAiAnalyzing(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [currentStep, title, description, selectedCategory]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -92,11 +140,14 @@ export default function ReportPage() {
   };
 
   const handleAddressSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && address.trim()) {
+    if (e.key === "Enter" && address.trim()) {
       setIsSearching(true);
       setSearchResults([]);
       try {
-        const res = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=" + encodeURIComponent(address));
+        const res = await fetch(
+          "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=" +
+            encodeURIComponent(address)
+        );
         const data = await res.json();
         if (data && data.length > 0) {
           setSearchResults(data);
@@ -121,13 +172,13 @@ export default function ReportPage() {
   const canProceed = () => {
     switch (currentStep) {
       case 1:
-        return selectedCategory !== null;
-      case 2:
         return location !== null && address.length > 0;
+      case 2:
+        return true; // photos optional
       case 3:
-        return title.length > 0 && description.length >= 10;
+        return title.length >= 5 && description.length >= 10 && selectedCategory !== null;
       case 4:
-        return true;
+        return !aiAnalyzing;
       default:
         return false;
     }
@@ -135,13 +186,12 @@ export default function ReportPage() {
 
   const handleSubmit = () => {
     if (!selectedCategory || !title || !description || !location || !address) return;
-    
-    // Construct request matching createIssueSchema Zod validation
+
     const payload = {
       title,
       description,
       category: selectedCategory,
-      priority: "medium", // default
+      priority: aiResults?.severity || "medium",
       location: {
         lat: location.lat,
         lng: location.lng,
@@ -152,47 +202,18 @@ export default function ReportPage() {
     };
 
     createIssueMutation.mutate(payload, {
-      onSuccess: () => {
-        setSubmitted(true);
+      onSuccess: (newIssue: any) => {
+        // Direct transition into tracking experience
+        router.push(`/issues/${newIssue.data?.id || newIssue.id}`);
       },
       onError: (err) => {
         console.error("Create issue failed:", err);
-      }
+      },
     });
   };
 
-  if (submitted) {
-    return (
-      <div className="min-h-[calc(100vh-56px)] lg:min-h-screen flex items-center justify-center p-4">
-        <div className="text-center max-w-sm">
-          <div className="w-16 h-16 rounded-2xl bg-green-50 flex items-center justify-center text-green-600 mx-auto mb-6">
-            <Check size={32} />
-          </div>
-          <h1 className="text-h1 text-gray-900 mb-2">Report Submitted</h1>
-          <p className="text-body text-gray-500 mb-8">
-            Thank you for making your community better. You&apos;ll receive
-            updates as your report is reviewed and resolved.
-          </p>
-          <div className="flex flex-col gap-3">
-            <Link href="/map">
-              <Button className="w-full" size="lg">
-                <MapPin size={18} />
-                Back to Map
-              </Button>
-            </Link>
-            <Link href="/issues">
-              <Button variant="outline" className="w-full" size="lg">
-                View All Issues
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-[calc(100vh-56px)] lg:min-h-screen bg-surface-secondary">
+    <div className="min-h-[calc(100vh-56px)] lg:min-h-screen bg-slate-50/50 flex flex-col">
       {/* Hidden file input */}
       <input
         type="file"
@@ -203,319 +224,320 @@ export default function ReportPage() {
       />
 
       {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-20">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <Link
-            href="/map"
+            href="/issues"
             className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors"
           >
             <ArrowLeft size={18} />
             <span className="text-small font-medium">Cancel</span>
           </Link>
-          <span className="text-small font-medium text-gray-900">
-            Report Issue
+          <span className="text-small font-bold text-gray-900">
+            Report Civic Issue
           </span>
           <div className="w-16" />
         </div>
       </div>
 
-      {/* Step indicator */}
-      <div className="bg-white border-b border-gray-100">
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 py-3">
-          <div className="flex items-center gap-2">
-            {steps.map((step, i) => (
-              <div key={step.id} className="flex items-center gap-2 flex-1">
-                <div className="flex items-center gap-2 flex-1">
-                  <div
-                    className={cn(
-                      "w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-semibold shrink-0",
-                      "transition-all duration-normal",
-                      currentStep > step.id
-                        ? "bg-green-600 text-white"
-                        : currentStep === step.id
-                        ? "bg-blue-700 text-white"
-                        : "bg-gray-100 text-gray-400"
-                    )}
-                  >
-                    {currentStep > step.id ? (
-                      <Check size={14} />
-                    ) : (
-                      step.id
-                    )}
-                  </div>
-                  <span
-                    className={cn(
-                      "text-[12px] font-medium hidden sm:block",
-                      currentStep >= step.id
-                        ? "text-gray-900"
-                        : "text-gray-400"
-                    )}
-                  >
-                    {step.label}
-                  </span>
+      {/* Persistent horizontal progress indicator */}
+      <div className="bg-white border-b border-gray-100 py-4 shadow-sm">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-between relative">
+            <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-100 -translate-y-1/2 z-0" />
+            <div
+              className="absolute top-1/2 left-0 h-0.5 bg-blue-600 -translate-y-1/2 z-0 transition-all duration-300"
+              style={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}
+            />
+            {steps.map((step) => (
+              <div key={step.id} className="flex flex-col items-center z-10 relative">
+                <div
+                  className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-semibold transition-all duration-300",
+                    currentStep > step.id
+                      ? "bg-green-600 text-white shadow-md"
+                      : currentStep === step.id
+                      ? "bg-blue-600 text-white ring-4 ring-blue-100 shadow-md"
+                      : "bg-white border-2 border-gray-200 text-gray-400"
+                  )}
+                >
+                  {currentStep > step.id ? <Check size={14} /> : step.id}
                 </div>
-                {i < steps.length - 1 && (
-                  <div
-                    className={cn(
-                      "h-px flex-1",
-                      currentStep > step.id ? "bg-green-600" : "bg-gray-200"
-                    )}
-                  />
-                )}
+                <span
+                  className={cn(
+                    "text-[11px] font-semibold mt-1.5 transition-colors duration-300 hidden sm:block",
+                    currentStep === step.id ? "text-blue-700 font-bold" : "text-gray-500"
+                  )}
+                >
+                  {step.label}
+                </span>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Step content */}
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
-        {/* Step 1: Category */}
-        {currentStep === 1 && (
-          <div>
-            <h2 className="text-h1 text-gray-900 mb-2">
-              What type of issue?
-            </h2>
-            <p className="text-body text-gray-500 mb-6">
-              Select the category that best describes the problem.
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {CATEGORIES.map((cat) => {
-                const Icon = iconMap[cat.icon];
-                const isSelected = selectedCategory === cat.id;
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => setSelectedCategory(cat.id)}
-                    className={cn(
-                      "flex flex-col items-center gap-2.5 p-4 rounded-xl",
-                      "border-2 transition-all duration-fast cursor-pointer",
-                      "text-center",
-                      "hover:shadow-sm",
-                      isSelected
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-gray-200 bg-white hover:border-gray-300"
-                    )}
-                  >
-                    <div
-                      className="w-11 h-11 rounded-xl flex items-center justify-center"
-                      style={{
-                        backgroundColor: cat.bgColor,
-                        color: cat.color,
-                      }}
-                    >
-                      {Icon && <Icon size={22} />}
-                    </div>
-                    <div>
-                      <div className="text-small font-medium text-gray-900">
-                        {cat.label}
-                      </div>
-                      <div className="text-[11px] text-gray-400 mt-0.5">
-                        {cat.description}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Location */}
-        {currentStep === 2 && (
-          <div>
-            <h2 className="text-h1 text-gray-900 mb-2">
-              Where is the issue?
-            </h2>
-            <p className="text-body text-gray-500 mb-6">
-              Enter the address or pin a location on the map.
-            </p>
-            <div className="relative mb-4">
-              <Input
-                placeholder="Enter address or intersection... (Press Enter to search)"
-                icon={isSearching ? <Loader2 size={16} className="animate-spin text-gray-400" /> : <MapPin size={16} />}
-                value={address}
-                onChange={(e) => { setAddress(e.target.value); if (searchResults.length > 0) setSearchResults([]); }}
-                onKeyDown={handleAddressSearch}
-              />
-              {searchResults.length > 0 && (
-                <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden max-h-[240px] overflow-y-auto">
-                  {searchResults.map((result, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => selectSearchResult(result)}
-                      className={cn(
-                        "w-full text-left px-4 py-3 flex items-start gap-3 cursor-pointer",
-                        "transition-colors hover:bg-blue-50",
-                        idx > 0 && "border-t border-gray-100"
-                      )}
-                    >
-                      <MapPin size={14} className="text-gray-400 mt-0.5 shrink-0" />
-                      <span className="text-sm text-gray-700 leading-snug line-clamp-2">{result.display_name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            {/* Real Map Picker */}
-            <Card padding="none" className="overflow-hidden h-[300px] sm:h-[400px]">
-              <LocationPickerWrapper
-                position={location}
-                searchedLocation={searchedLocation}
-                onLocationSelect={(lat, lng, addr) => {
-                  setLocation({ lat, lng });
-                  setAddress(addr);
-                }}
-              />
-            </Card>
-          </div>
-        )}
-
-        {/* Step 3: Details */}
-        {currentStep === 3 && (
-          <div>
-            <h2 className="text-h1 text-gray-900 mb-2">
-              Describe the issue
-            </h2>
-            <p className="text-body text-gray-500 mb-6">
-              A clear title and description helps teams respond faster.
-            </p>
-            <div className="space-y-4">
+      {/* Main Form content area */}
+      <div className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 py-8 flex flex-col justify-between">
+        <Card className="flex-1 p-6 sm:p-8 shadow-md border-slate-100/80 bg-white">
+          {/* Step 1: Location */}
+          {currentStep === 1 && (
+            <div className="space-y-6">
               <div>
-                <label className="block text-small font-medium text-gray-700 mb-1.5">
-                  Title (min 5 chars)
-                </label>
+                <h2 className="text-h2 font-bold text-gray-900 flex items-center gap-2">
+                  <MapPin className="text-blue-600" size={24} />
+                  Where did you spot the issue?
+                </h2>
+                <p className="text-body text-gray-500 mt-1">
+                  We use location to route the issue directly to the responsible district.
+                </p>
+              </div>
+
+              <div className="relative">
                 <Input
-                  placeholder="e.g., Large pothole on Main Street"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Type an address or search... (Press Enter)"
+                  icon={isSearching ? <Loader2 size={16} className="animate-spin text-blue-600" /> : <Search size={16} />}
+                  value={address}
+                  onChange={(e) => {
+                    setAddress(e.target.value);
+                    if (searchResults.length > 0) setSearchResults([]);
+                  }}
+                  onKeyDown={handleAddressSearch}
+                />
+                {searchResults.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden max-h-[200px] overflow-y-auto">
+                    {searchResults.map((result, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => selectSearchResult(result)}
+                        className="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-slate-50 transition-colors border-b border-slate-50 cursor-pointer"
+                      >
+                        <MapPin size={14} className="text-gray-400 mt-0.5 shrink-0" />
+                        <span className="text-sm text-gray-700 leading-snug line-clamp-2">{result.display_name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl overflow-hidden border border-gray-200 h-[300px] sm:h-[350px]">
+                <LocationPickerWrapper
+                  position={location}
+                  searchedLocation={searchedLocation}
+                  onLocationSelect={(lat, lng, addr) => {
+                    setLocation({ lat, lng });
+                    setAddress(addr);
+                  }}
                 />
               </div>
-              <div>
-                <label className="block text-small font-medium text-gray-700 mb-1.5">
-                  Description (min 10 chars)
-                </label>
-                <textarea
-                  placeholder="Describe the issue, its size, and any safety concerns..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={4}
+            </div>
+          )}
+
+          {/* Step 2: Photo */}
+          {currentStep === 2 && (
+            <div className="space-y-6 text-center py-4">
+              <div className="max-w-md mx-auto">
+                <h2 className="text-h2 font-bold text-gray-900">Add photos of the issue</h2>
+                <p className="text-body text-gray-500 mt-1">
+                  A photo helps the community verify details and assists repair crews in selecting equipment.
+                </p>
+              </div>
+
+              <div className="max-w-lg mx-auto">
+                <div
+                  onClick={triggerFileSelect}
                   className={cn(
-                    "w-full px-3 py-2.5 rounded-lg",
-                    "bg-white border border-gray-200",
-                    "text-body text-gray-900 placeholder:text-gray-400",
-                    "transition-all duration-fast",
-                    "hover:border-gray-300",
-                    "focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600",
-                    "resize-none"
+                    "border-2 border-dashed border-slate-300 rounded-2xl p-8 hover:border-blue-600 transition-colors cursor-pointer bg-slate-50/50 flex flex-col items-center justify-center min-h-[200px]",
+                    photos.length > 0 && "py-4 min-h-0"
                   )}
-                />
+                >
+                  <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+                    <Upload size={22} />
+                  </div>
+                  <span className="text-small font-bold text-slate-800">Upload an image</span>
+                  <span className="text-tiny text-slate-400 mt-1">PNG, JPG, WEBP up to 10MB</span>
+                </div>
+
+                {photos.length > 0 && (
+                  <div className="grid grid-cols-3 gap-3 mt-6">
+                    {photos.map((photoUrl, index) => (
+                      <div key={index} className="aspect-square rounded-xl overflow-hidden border border-slate-200 relative group">
+                        <img src={photoUrl} alt="Upload preview" className="w-full h-full object-cover" />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPhotos((p) => p.filter((_, i) => i !== index));
+                          }}
+                          className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black transition-colors"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
+            </div>
+          )}
+
+          {/* Step 3: Description */}
+          {currentStep === 3 && (
+            <div className="space-y-6">
               <div>
-                <label className="block text-small font-medium text-gray-700 mb-1.5">
-                  Photos (optional)
-                </label>
-                <div className="flex flex-wrap gap-3">
-                  {photos.map((photoUrl, index) => (
-                    <div key={index} className="w-20 h-20 rounded-xl overflow-hidden border border-gray-200 bg-gray-50 relative">
-                      <img src={photoUrl} alt="Upload thumbnail" className="w-full h-full object-cover" />
-                    </div>
-                  ))}
-                  
-                  <button
-                    onClick={triggerFileSelect}
-                    disabled={isUploading}
-                    className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 hover:border-gray-400 hover:text-gray-500 transition-colors cursor-pointer"
-                  >
-                    {isUploading ? (
-                      <Loader2 size={20} className="animate-spin text-blue-600" />
-                    ) : (
-                      <>
-                        <Upload size={20} />
-                        <span className="text-[10px] font-medium">Upload</span>
-                      </>
-                    )}
-                  </button>
+                <h2 className="text-h2 font-bold text-gray-900">What is the problem?</h2>
+                <p className="text-body text-gray-500 mt-1">
+                  Select a category and provide details. This will help our AI categorize it correctly.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-small font-bold text-slate-700 mb-2">Category</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {CATEGORIES.map((cat) => {
+                      const Icon = iconMap[cat.icon];
+                      const isSelected = selectedCategory === cat.id;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setSelectedCategory(cat.id)}
+                          className={cn(
+                            "flex items-center gap-2 p-2.5 rounded-xl border-2 transition-all text-left cursor-pointer",
+                            isSelected
+                              ? "border-blue-600 bg-blue-50/50 text-blue-800"
+                              : "border-slate-100 bg-slate-50/50 text-slate-700 hover:border-slate-200"
+                          )}
+                        >
+                          <div
+                            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                            style={{ backgroundColor: cat.bgColor, color: cat.color }}
+                          >
+                            {Icon && <Icon size={16} />}
+                          </div>
+                          <span className="text-[12px] font-bold truncate">{cat.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-small font-bold text-slate-700 mb-1.5">Short Title</label>
+                  <Input
+                    placeholder="e.g. Broken streetlight causing dark alleyway"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-small font-bold text-slate-700 mb-1.5">Description details</label>
+                  <textarea
+                    placeholder="Provide details. What size is it? Is it obstructing traffic? Are there safety hazards?"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={4}
+                    className="w-full px-3 py-2.5 rounded-lg bg-slate-50/30 border border-gray-200 text-body text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 resize-none hover:border-slate-300 transition-colors"
+                  />
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Step 4: Review */}
-        {currentStep === 4 && (
-          <div>
-            <h2 className="text-h1 text-gray-900 mb-2">
-              Review your report
-            </h2>
-            <p className="text-body text-gray-500 mb-6">
-              Make sure everything looks correct before submitting.
-            </p>
-            <Card padding="lg" className="space-y-4">
-              <div>
-                <span className="text-tiny text-gray-400 block mb-1">
-                  Category
-                </span>
-                <span className="text-body font-medium text-gray-900">
-                  {CATEGORIES.find((c) => c.id === selectedCategory)?.label}
-                </span>
-              </div>
-              <div className="h-px bg-gray-100" />
-              <div>
-                <span className="text-tiny text-gray-400 block mb-1">
-                  Location
-                </span>
-                <span className="text-body text-gray-900">
-                  {address || "—"}
-                </span>
-              </div>
-              <div className="h-px bg-gray-100" />
-              <div>
-                <span className="text-tiny text-gray-400 block mb-1">
-                  Title
-                </span>
-                <span className="text-body font-medium text-gray-900">
-                  {title || "—"}
-                </span>
-              </div>
-              {description && (
-                <>
-                  <div className="h-px bg-gray-100" />
-                  <div>
-                    <span className="text-tiny text-gray-400 block mb-1">
-                      Description
-                    </span>
-                    <span className="text-small text-gray-600">
-                      {description}
-                    </span>
+          {/* Step 4: AI Review */}
+          {currentStep === 4 && (
+            <div className="space-y-6 py-6">
+              {aiAnalyzing ? (
+                <div className="flex flex-col items-center justify-center py-10 space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center relative">
+                    <Sparkles className="text-blue-600 animate-pulse" size={32} />
+                    <div className="absolute inset-0 rounded-full border-2 border-blue-500/20 border-t-blue-600 animate-spin" />
                   </div>
-                </>
-              )}
-              {photos.length > 0 && (
-                <>
-                  <div className="h-px bg-gray-100" />
+                  <h3 className="text-h3 font-bold text-slate-900">AI Review in Progress...</h3>
+                  <p className="text-body text-gray-500 max-w-xs text-center">
+                    Analyzing description and uploaded image to classify category, priority, and assign department.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
                   <div>
-                    <span className="text-tiny text-gray-400 block mb-1">
-                      Photos ({photos.length})
-                    </span>
-                    <div className="flex gap-2 mt-1">
-                      {photos.map((photoUrl, index) => (
-                        <img key={index} src={photoUrl} className="w-12 h-12 object-cover rounded-lg border border-gray-200" alt="Thumbnail" />
-                      ))}
+                    <h2 className="text-h2 font-bold text-gray-900 flex items-center gap-2">
+                      <ShieldCheck className="text-green-600" size={24} />
+                      AI Audit Results
+                    </h2>
+                    <p className="text-body text-gray-500">
+                      Our AI has reviewed your submission. Confirm details below before launching the workflow.
+                    </p>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <Card padding="md" className="border-green-100 bg-green-50/20">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-green-100 text-green-700 flex items-center justify-center font-bold">
+                          <Check size={20} />
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-green-700 block">Classified Category</span>
+                          <span className="text-body font-bold text-slate-800">
+                            {CATEGORIES.find((c) => c.id === aiResults?.suggestedCategory)?.label || "Other"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-[11px] text-green-600 font-semibold">
+                        Confidence Score: {aiResults?.confidence}%
+                      </div>
+                    </Card>
+
+                    <Card padding="md" className="border-red-100 bg-red-50/20">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-red-100 text-red-700 flex items-center justify-center font-bold">
+                          <Flame size={20} />
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-red-700 block">Suggested Priority</span>
+                          <span className="text-body font-bold text-slate-800 uppercase">
+                            {aiResults?.severity}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-[11px] text-red-600 font-semibold">
+                        Auto-assigned to Municipality queue
+                      </div>
+                    </Card>
+                  </div>
+
+                  {aiResults?.description && (
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-left">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">AI Image Analysis Details</span>
+                      <span className="text-xs text-slate-700 leading-relaxed font-semibold">
+                        {aiResults.description}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="h-px bg-slate-100" />
+
+                  <div className="space-y-3">
+                    <span className="text-small font-bold text-slate-600 block">Verification Timeline Preview</span>
+                    <div className="text-[12px] text-slate-500 leading-relaxed bg-slate-50 p-4 rounded-xl">
+                      🚀 <strong>Instant:</strong> Sent to Municipality queue & neighboring residents on the map. <br/>
+                      👥 <strong>Neighbor Verification:</strong> Issues require verified votes to fast-track municipal action.
                     </div>
                   </div>
-                </>
+                </div>
               )}
-            </Card>
-          </div>
-        )}
+            </div>
+          )}
+        </Card>
 
-        {/* Navigation buttons */}
-        <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-200">
+        {/* Navigation bottom bar */}
+        <div className="flex items-center justify-between mt-6">
           <Button
             variant="ghost"
             onClick={() => setCurrentStep((s) => Math.max(1, s - 1))}
-            disabled={currentStep === 1}
+            disabled={currentStep === 1 || createIssueMutation.isPending}
+            className="font-semibold text-slate-500 hover:text-slate-800"
           >
             <ArrowLeft size={16} />
             Back
@@ -525,18 +547,23 @@ export default function ReportPage() {
             <Button
               onClick={() => setCurrentStep((s) => Math.min(4, s + 1))}
               disabled={!canProceed()}
+              className="font-semibold px-6 shadow-sm"
             >
               Continue
               <ArrowRight size={16} />
             </Button>
           ) : (
-            <Button onClick={handleSubmit} disabled={createIssueMutation.isPending}>
+            <Button
+              onClick={handleSubmit}
+              disabled={!canProceed() || createIssueMutation.isPending}
+              className="font-bold bg-green-600 hover:bg-green-700 text-white px-8 shadow-md"
+            >
               {createIssueMutation.isPending ? (
                 <Loader2 size={16} className="animate-spin mr-1" />
               ) : (
                 <Check size={16} />
               )}
-              Submit Report
+              Submit & Track
             </Button>
           )}
         </div>

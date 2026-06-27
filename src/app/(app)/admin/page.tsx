@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CATEGORIES, STATUS_CONFIG } from "@/lib/constants";
+import { useUpdateIssue } from "@/hooks/use-issues";
 import {
   BarChart3,
   Users,
@@ -24,9 +25,23 @@ import {
   X,
   RefreshCw,
   SlidersHorizontal,
+  Wrench,
+  Truck,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { cn, formatDate } from "@/lib/utils";
+
+// Tabs corresponding to lifecycle stages
+const ADMIN_TABS = [
+  { id: "all", label: "All Reports" },
+  { id: "verification", label: "Needs Verification" },
+  { id: "review", label: "Municipality Review" },
+  { id: "assigned", label: "Worker Assigned" },
+  { id: "dispatched", label: "Crew Dispatched" },
+  { id: "repair", label: "In Progress" },
+  { id: "resolved", label: "Resolved" },
+];
 
 export default function AdminDashboardPage() {
   const { user, isLoading: authLoading } = useAuth();
@@ -34,17 +49,17 @@ export default function AdminDashboardPage() {
   const [recentIssues, setRecentIssues] = useState<any[]>([]);
   const [statsLoading, setStatsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>("all");
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const fetchDashboardData = async () => {
     setStatsLoading(true);
     setError(null);
     try {
-      // 1. Fetch dashboard data (only works if admin)
       const data = await dashboardApi.getDashboardData("admin");
       setDashboardData(data);
 
-      // 2. Fetch all recent issues to display in detail table
-      const issuesResponse = await issuesApi.getIssues({ limit: 15 });
+      const issuesResponse = await issuesApi.getIssues({ limit: 40 });
       setRecentIssues(issuesResponse?.data || []);
     } catch (err: any) {
       console.error("Failed to fetch admin stats:", err);
@@ -112,31 +127,54 @@ export default function AdminDashboardPage() {
     );
   }
 
-  const { issueStats, topContributors, recentlyResolved } = dashboardData || {
+  const { issueStats, topContributors } = dashboardData || {
     issueStats: { total: 0, byStatus: {}, byCategory: {}, byPriority: {} },
     topContributors: [],
-    recentlyResolved: [],
   };
 
   const totalReported = issueStats.total || 0;
   const totalResolved = issueStats.byStatus?.resolved || 0;
-  const totalInProgress = issueStats.byStatus?.in_progress || 0;
-  const totalAcknowledged = issueStats.byStatus?.acknowledged || 0;
-  const totalPending = issueStats.byStatus?.reported || 0;
+  const totalVerification = issueStats.byStatus?.verification || 0;
+  const totalReview = issueStats.byStatus?.review || 0;
+  const totalAssigned = issueStats.byStatus?.assigned || 0;
+  const totalDispatched = issueStats.byStatus?.dispatched || 0;
+  const totalRepair = issueStats.byStatus?.repair || 0;
   
   const resolutionRate = totalReported > 0 ? Math.round((totalResolved / totalReported) * 100) : 0;
 
+  // Filter issues based on active tab
+  const filteredIssues = recentIssues.filter((issue) => {
+    if (activeTab === "all") return true;
+    return issue.status === activeTab;
+  });
+
+  // Action dispatcher handler
+  const handleTransitionStatus = async (issueId: string, nextStatus: string) => {
+    setUpdatingId(issueId);
+    try {
+      await issuesApi.updateIssue(issueId, { status: nextStatus });
+      // Update local state for immediate response
+      setRecentIssues((prev) =>
+        prev.map((issue) => (issue.id === issueId ? { ...issue, status: nextStatus } : issue))
+      );
+    } catch (err) {
+      console.error("Failed to advance status:", err);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   return (
-    <div className="min-h-[calc(100vh-56px)] lg:min-h-screen bg-slate-50/50 py-6 sm:py-8 px-4 sm:px-6 max-w-7xl mx-auto">
+    <div className="min-h-[calc(100vh-56px)] lg:min-h-screen bg-slate-50/40 py-8 px-4 sm:px-6 max-w-7xl mx-auto text-left">
       {/* Title Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-h1 text-gray-900 flex items-center gap-2">
+          <h1 className="text-h1 font-extrabold text-gray-900 flex items-center gap-2">
             <Shield className="text-blue-600" size={28} />
-            Command Center
+            Lifecycle Admin Command Center
           </h1>
           <p className="text-body text-gray-500 mt-1">
-            Realtime operational insight, user statistics, and issues routing.
+            Track, verify, and dispatch work orders through the civic lifecycle stages.
           </p>
         </div>
         <div className="flex gap-2">
@@ -144,22 +182,22 @@ export default function AdminDashboardPage() {
             variant="outline"
             size="sm"
             onClick={fetchDashboardData}
-            className="flex items-center gap-1.5 bg-white border border-gray-200"
+            className="flex items-center gap-1.5 bg-white border border-gray-200 font-bold"
           >
             <RefreshCw size={14} className={cn(statsLoading && "animate-spin")} />
-            Sync Realtime
+            Sync Lifecycle
           </Button>
         </div>
       </div>
 
       {/* Grid of Key Metrics Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Card className="p-5 flex flex-col justify-between hover:shadow-md transition-shadow bg-white border border-gray-150">
+        <Card className="p-5 flex flex-col justify-between hover:shadow-md transition-shadow bg-white border border-slate-100">
           <div>
-            <span className="text-[12px] font-medium text-gray-400 uppercase tracking-wider">
+            <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">
               Total Reports
             </span>
-            <h3 className="text-h1 text-gray-900 font-bold mt-1">
+            <h3 className="text-h1 text-gray-900 font-black mt-1">
               {totalReported}
             </h3>
           </div>
@@ -169,42 +207,42 @@ export default function AdminDashboardPage() {
           </div>
         </Card>
 
-        <Card className="p-5 flex flex-col justify-between hover:shadow-md transition-shadow bg-white border border-gray-150">
+        <Card className="p-5 flex flex-col justify-between hover:shadow-md transition-shadow bg-white border border-slate-100">
           <div>
-            <span className="text-[12px] font-medium text-gray-400 uppercase tracking-wider">
-              Active Issues
+            <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">
+              Verification Pending
             </span>
-            <h3 className="text-h1 text-orange-600 font-bold mt-1">
-              {totalPending + totalInProgress + totalAcknowledged}
+            <h3 className="text-h1 text-indigo-600 font-black mt-1">
+              {totalVerification}
             </h3>
           </div>
           <div className="text-[11px] text-gray-400 mt-3 flex items-center gap-1">
-            <Clock size={12} className="text-orange-500" />
-            {totalPending} pending, {totalInProgress} in progress
+            <Clock size={12} className="text-indigo-500" />
+            Waiting for neighbors
           </div>
         </Card>
 
-        <Card className="p-5 flex flex-col justify-between hover:shadow-md transition-shadow bg-white border border-gray-150">
+        <Card className="p-5 flex flex-col justify-between hover:shadow-md transition-shadow bg-white border border-slate-100">
           <div>
-            <span className="text-[12px] font-medium text-gray-400 uppercase tracking-wider">
-              Resolved
+            <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">
+              Resolved & Fixed
             </span>
-            <h3 className="text-h1 text-green-600 font-bold mt-1">
+            <h3 className="text-h1 text-green-600 font-black mt-1">
               {totalResolved}
             </h3>
           </div>
           <div className="text-[11px] text-gray-400 mt-3 flex items-center gap-1">
             <CheckCircle2 size={12} className="text-green-500" />
-            Issues successfully closed
+            Completed resolutions
           </div>
         </Card>
 
-        <Card className="p-5 flex flex-col justify-between hover:shadow-md transition-shadow bg-white border border-gray-150">
+        <Card className="p-5 flex flex-col justify-between hover:shadow-md transition-shadow bg-white border border-slate-100">
           <div>
-            <span className="text-[12px] font-medium text-gray-400 uppercase tracking-wider">
+            <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">
               Resolution Rate
             </span>
-            <h3 className="text-h1 text-blue-600 font-bold mt-1">
+            <h3 className="text-h1 text-blue-600 font-black mt-1">
               {resolutionRate}%
             </h3>
           </div>
@@ -217,9 +255,8 @@ export default function AdminDashboardPage() {
 
       {/* Middle Grid: Categories & Top Contributors */}
       <div className="grid lg:grid-cols-3 gap-6 mb-8">
-        {/* Left Column: Categories stats */}
-        <Card className="lg:col-span-2 p-6 bg-white border border-gray-150">
-          <h2 className="text-h3 text-gray-900 mb-4 flex items-center gap-2 font-bold">
+        <Card className="lg:col-span-2 p-6 bg-white border border-slate-100">
+          <h2 className="text-h3 text-gray-900 mb-4 flex items-center gap-2 font-extrabold">
             <BarChart3 size={18} className="text-blue-600" />
             Reports By Category
           </h2>
@@ -228,19 +265,19 @@ export default function AdminDashboardPage() {
               const count = issueStats.byCategory?.[cat.id] || 0;
               const pct = totalReported > 0 ? Math.round((count / totalReported) * 100) : 0;
               return (
-                <div key={cat.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50/50">
+                <div key={cat.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/30">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div
-                      className="w-3.5 h-3.5 rounded-full flex-shrink-0"
+                      className="w-3 h-3 rounded-full flex-shrink-0"
                       style={{ backgroundColor: cat.color }}
                     />
-                    <span className="text-small font-medium text-gray-800 truncate">
+                    <span className="text-small font-bold text-gray-700 truncate">
                       {cat.label}
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-small font-bold text-gray-900">{count}</span>
-                    <span className="text-[11px] text-gray-400 font-medium w-8 text-right">{pct}%</span>
+                    <span className="text-[11px] text-gray-400 font-bold w-8 text-right">{pct}%</span>
                   </div>
                 </div>
               );
@@ -248,15 +285,14 @@ export default function AdminDashboardPage() {
           </div>
         </Card>
 
-        {/* Right Column: Top Contributors */}
-        <Card className="p-6 bg-white border border-gray-150">
-          <h2 className="text-h3 text-gray-900 mb-4 flex items-center gap-2 font-bold">
+        <Card className="p-6 bg-white border border-slate-100">
+          <h2 className="text-h3 text-gray-900 mb-4 flex items-center gap-2 font-extrabold">
             <UserCheck size={18} className="text-blue-600" />
             Top Contributors
           </h2>
           <div className="space-y-4">
             {topContributors.length > 0 ? (
-              topContributors.map((contrib: any, idx: number) => (
+              topContributors.map((contrib: any) => (
                 <div key={contrib.id} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {contrib.avatar ? (
@@ -267,15 +303,13 @@ export default function AdminDashboardPage() {
                       </div>
                     )}
                     <div>
-                      <div className="text-small font-medium text-gray-900">{contrib.name}</div>
-                      <div className="text-[11px] text-gray-400 uppercase tracking-wider">{contrib.role}</div>
+                      <div className="text-small font-bold text-gray-900">{contrib.name}</div>
+                      <div className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">{contrib.role}</div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <Badge variant="primary" className="text-small font-semibold px-2 py-0.5">
-                      {contrib.issuesReported || 0} Reports
-                    </Badge>
-                  </div>
+                  <Badge variant="primary" className="text-small font-bold px-2 py-0.5">
+                    {contrib.issuesReported || 0} Reports
+                  </Badge>
                 </div>
               ))
             ) : (
@@ -285,15 +319,33 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      {/* Bottom Section: Raw incoming issue ledger */}
-      <Card className="p-6 bg-white border border-gray-150 overflow-hidden">
+      {/* Lifecycle Tabs Selection */}
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-none">
+        {ADMIN_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={cn(
+              "px-4 py-2 rounded-xl text-xs font-bold border transition-all shrink-0 cursor-pointer",
+              activeTab === tab.id
+                ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                : "bg-white border-slate-100 text-slate-600 hover:bg-slate-50"
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Raw incoming issue ledger */}
+      <Card className="p-6 bg-white border border-slate-100 overflow-hidden shadow-sm">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-h3 text-gray-900 flex items-center gap-2 font-bold">
-            <FileText size={18} className="text-blue-600" />
-            Incoming Reports Ledger
+          <h2 className="text-h3 text-gray-900 flex items-center gap-2 font-extrabold">
+            <FileText size={18} className="text-slate-400" />
+            Operational Queue ({filteredIssues.length})
           </h2>
-          <span className="text-[11px] bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2.5 py-0.5 font-semibold">
-            Realtime
+          <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2.5 py-0.5 font-bold uppercase tracking-wider">
+            Live Queue
           </span>
         </div>
 
@@ -301,68 +353,154 @@ export default function AdminDashboardPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="pb-3 text-[11px] font-bold uppercase tracking-wider text-gray-400">ID & Title</th>
-                <th className="pb-3 text-[11px] font-bold uppercase tracking-wider text-gray-400">Reporter</th>
-                <th className="pb-3 text-[11px] font-bold uppercase tracking-wider text-gray-400">Category</th>
-                <th className="pb-3 text-[11px] font-bold uppercase tracking-wider text-gray-400">Status</th>
-                <th className="pb-3 text-[11px] font-bold uppercase tracking-wider text-gray-400">Reported Date</th>
-                <th className="pb-3 text-[11px] font-bold uppercase tracking-wider text-gray-400 text-right">Actions</th>
+                <th className="pb-3 text-[11px] font-extrabold uppercase tracking-wider text-gray-400">ID & Title</th>
+                <th className="pb-3 text-[11px] font-extrabold uppercase tracking-wider text-gray-400">Reporter & Location</th>
+                <th className="pb-3 text-[11px] font-extrabold uppercase tracking-wider text-gray-400">Stage</th>
+                <th className="pb-3 text-[11px] font-extrabold uppercase tracking-wider text-gray-400 text-right">Lifecycle Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {recentIssues.length > 0 ? (
-                recentIssues.map((issue) => (
-                  <tr key={issue.id} className="hover:bg-gray-50/50 transition-colors">
+            <tbody className="divide-y divide-slate-50">
+              {filteredIssues.length > 0 ? (
+                filteredIssues.map((issue) => (
+                  <tr key={issue.id} className="hover:bg-slate-50/30 transition-colors">
                     <td className="py-4 pr-3">
-                      <div className="text-small font-medium text-gray-900 truncate max-w-[200px]" title={issue.title}>
-                        {issue.title}
-                      </div>
-                      <div className="text-[11px] text-gray-400 font-mono mt-0.5">{issue.id}</div>
+                      <Link href={`/issues/${issue.id}`} className="hover:underline">
+                        <div className="text-small font-bold text-gray-900 truncate max-w-[200px]" title={issue.title}>
+                          {issue.title}
+                        </div>
+                      </Link>
+                      <div className="text-[10px] text-gray-400 font-mono mt-0.5">{issue.id}</div>
                     </td>
                     <td className="py-4 pr-3">
-                      <div className="text-small font-medium text-gray-700">
-                        {issue.reportedByName || (typeof issue.reportedBy === 'object' && issue.reportedBy?.name) || "Anonymous"}
+                      <div className="text-small font-semibold text-gray-700">
+                        {issue.reportedByName || (typeof issue.reportedBy === "object" && issue.reportedBy?.name) || "Anonymous"}
                       </div>
-                      <div className="text-[11px] text-gray-400 truncate max-w-[150px]" title={issue.location?.address}>
+                      <div className="text-[11px] text-gray-400 truncate max-w-[220px]" title={issue.location?.address}>
                         {issue.location?.address}
                       </div>
-                    </td>
-                    <td className="py-4 pr-3">
-                      <span className="text-[12px] font-medium text-gray-600 capitalize">
-                        {issue.category.replace("_", " ")}
-                      </span>
                     </td>
                     <td className="py-4 pr-3">
                       <Badge
                         variant={
                           issue.status === "resolved"
                             ? "success"
-                            : issue.status === "in_progress"
+                            : issue.status === "closed"
+                            ? "default"
+                            : issue.status === "verification" || issue.status === "review"
                             ? "warning"
                             : "primary"
                         }
                         dot
                       >
-                        {issue.status.replace("_", " ")}
+                        {STATUS_CONFIG[issue.status]?.label || issue.status}
                       </Badge>
                     </td>
-                    <td className="py-4 pr-3 text-[12px] text-gray-500">
-                      {formatDate(issue.createdAt)}
-                    </td>
                     <td className="py-4 text-right">
-                      <Link href={`/issues/${issue.id}`}>
-                        <Button size="sm" variant="outline" className="h-7 text-xs border-gray-200">
-                          Route
-                          <ArrowUpRight size={12} className="ml-1" />
-                        </Button>
-                      </Link>
+                      <div className="flex justify-end gap-2">
+                        
+                        {/* 9-stage operational controller actions */}
+                        {issue.status === "reported" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleTransitionStatus(issue.id, "verification")}
+                            disabled={updatingId === issue.id}
+                            className="bg-indigo-600 hover:bg-indigo-700 font-bold"
+                          >
+                            Push to Verification
+                          </Button>
+                        )}
+
+                        {issue.status === "verification" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleTransitionStatus(issue.id, "verified")}
+                            disabled={updatingId === issue.id}
+                            className="bg-cyan-600 hover:bg-cyan-700 font-bold"
+                          >
+                            Verify Manually
+                          </Button>
+                        )}
+
+                        {issue.status === "verified" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleTransitionStatus(issue.id, "review")}
+                            disabled={updatingId === issue.id}
+                            className="bg-purple-600 hover:bg-purple-700 font-bold"
+                          >
+                            Review File
+                          </Button>
+                        )}
+
+                        {issue.status === "review" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleTransitionStatus(issue.id, "assigned")}
+                            disabled={updatingId === issue.id}
+                            className="bg-amber-600 hover:bg-amber-700 font-bold"
+                          >
+                            Assign Crew
+                          </Button>
+                        )}
+
+                        {issue.status === "assigned" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleTransitionStatus(issue.id, "dispatched")}
+                            disabled={updatingId === issue.id}
+                            className="bg-red-600 hover:bg-red-700 font-bold"
+                          >
+                            Dispatch Crew
+                          </Button>
+                        )}
+
+                        {issue.status === "dispatched" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleTransitionStatus(issue.id, "repair")}
+                            disabled={updatingId === issue.id}
+                            className="bg-orange-600 hover:bg-orange-700 font-bold"
+                          >
+                            Start Repair
+                          </Button>
+                        )}
+
+                        {issue.status === "repair" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleTransitionStatus(issue.id, "resolved")}
+                            disabled={updatingId === issue.id}
+                            className="bg-green-600 hover:bg-green-700 font-bold"
+                          >
+                            Resolve Issue
+                          </Button>
+                        )}
+
+                        {issue.status === "resolved" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleTransitionStatus(issue.id, "closed")}
+                            disabled={updatingId === issue.id}
+                            className="bg-slate-600 hover:bg-slate-700 font-bold"
+                          >
+                            Close File
+                          </Button>
+                        )}
+
+                        <Link href={`/issues/${issue.id}`}>
+                          <Button size="sm" variant="outline" className="border-slate-200">
+                            Track
+                            <ArrowUpRight size={11} className="ml-0.5" />
+                          </Button>
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-gray-400 text-small">
-                    No reports filed yet.
+                  <td colSpan={4} className="py-8 text-center text-gray-400 text-small">
+                    No reports in this stage.
                   </td>
                 </tr>
               )}

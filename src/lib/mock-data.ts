@@ -45,7 +45,7 @@ export const mockIssues: Issue[] = [
     description:
       "A significant pothole has formed near the intersection of Main St and Oak Ave. It's approximately 2 feet wide and 6 inches deep. Multiple cars have had to swerve to avoid it.",
     category: "pothole",
-    status: "in_progress",
+    status: "repair",
     priority: "high",
     location: {
       lat: 40.7128,
@@ -106,7 +106,7 @@ export const mockIssues: Issue[] = [
     description:
       "The street light at 78 Elm Avenue has been out for over a week. The area is very dark at night and feels unsafe for pedestrians.",
     category: "streetlight",
-    status: "acknowledged",
+    status: "review",
     priority: "medium",
     location: {
       lat: 40.7148,
@@ -179,7 +179,7 @@ export const mockIssues: Issue[] = [
     description:
       "A persistent water leak from what appears to be a broken underground pipe. Water is pooling on the sidewalk and creating icy patches.",
     category: "water_leak",
-    status: "in_progress",
+    status: "repair",
     priority: "critical",
     location: {
       lat: 40.7155,
@@ -307,7 +307,7 @@ export const mockIssues: Issue[] = [
     description:
       "Someone has dumped mattresses, furniture, and bags of trash behind the Pine Street Shopping Center. It's attracting pests.",
     category: "trash",
-    status: "acknowledged",
+    status: "review",
     priority: "medium",
     location: {
       lat: 40.716,
@@ -395,7 +395,7 @@ export const mockIssues: Issue[] = [
     description:
       "The storm drain on Harbor Road is blocked with debris. During rain, the entire road floods and becomes impassable.",
     category: "drainage",
-    status: "in_progress",
+    status: "repair",
     priority: "high",
     location: {
       lat: 40.7085,
@@ -468,7 +468,7 @@ export const mockIssues: Issue[] = [
     description:
       "Construction site at the new apartment complex is operating heavy machinery on Sundays before 8 AM, violating noise ordinance.",
     category: "noise",
-    status: "acknowledged",
+    status: "review",
     priority: "low",
     location: {
       lat: 40.712,

@@ -18,6 +18,15 @@ export function useIssue(id: string) {
   });
 }
 
+export function useIssueTimeline(id: string) {
+  return useQuery({
+    queryKey: ['issue-timeline', id],
+    queryFn: () => issuesApi.getTimeline(id),
+    enabled: !!id,
+    refetchInterval: 3000, // Poll every 3 seconds for live AI updates
+  });
+}
+
 // Create new issue mutation
 export function useCreateIssue() {
   const queryClient = useQueryClient();

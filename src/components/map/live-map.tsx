@@ -5,7 +5,7 @@ import "leaflet/dist/leaflet.css";
 import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
 import L from "leaflet";
 import { cn } from "@/lib/utils";
-import { CATEGORIES } from "@/lib/constants";
+import { CATEGORIES, STATUS_CONFIG } from "@/lib/constants";
 import type { Issue } from "@/lib/types";
 import { MapControls } from "@/components/map/map-controls";
 
@@ -37,9 +37,9 @@ function getMapCenter(issues: Issue[]): [number, number] {
   return [avgLat, avgLng];
 }
 
-const createCategoryIcon = (category: string, isSelected: boolean) => {
-  const catDef = CATEGORIES.find((c) => c.id === category);
-  const color = catDef ? catDef.color : "#6b7280";
+const createStatusIcon = (status: string, isSelected: boolean) => {
+  const statusDef = STATUS_CONFIG[status];
+  const color = statusDef ? statusDef.color : "#6b7280";
   
   const scale = isSelected ? "scale(1.2)" : "scale(1)";
   const zIndex = isSelected ? 1000 : 1;
@@ -139,7 +139,7 @@ export function LiveMap({ issuesList = [], onPinClick, selectedIssueId, classNam
             <Marker
               key={issue.id}
               position={[issue.location.lat, issue.location.lng]}
-              icon={createCategoryIcon(issue.category, isSelected)}
+              icon={createStatusIcon(issue.status, isSelected)}
               eventHandlers={{
                 click: () => {
                   if (onPinClick) onPinClick(issue);
