@@ -187,7 +187,7 @@ export class IssueService {
 
     const issue = await this.issueRepo.create({
       title: data.title, description: data.description, category: data.category,
-      status: 'reported', priority: data.priority || 'medium', severity: data.severity,
+      status: 'verification', priority: data.priority || 'medium', severity: data.severity,
       location: data.location, photos: data.photos || [],
       reportedBy: userId, reportedByName: user.name,
       upvotes: 0, downvotes: 0, commentCount: 0,
@@ -342,8 +342,21 @@ export class IssueService {
     const issue = await this.issueRepo.findById(issueId);
     if (!issue) throw AppError.notFound('Issue');
     await this.issueRepo.incrementVerificationCount(issueId);
-    if (issue.verificationCount + 1 >= 3 && !issue.isVerified) {
-      await this.issueRepo.update(issueId, { isVerified: true, verifiedBy: userId } as Partial<IIssue>);
+    const newCount = (issue.verificationCount || 0) + 1;
+    if (newCount >= 3 && !issue.isVerified) {
+      // Community verification threshold reached — mark verified and advance status
+      await this.issueRepo.update(issueId, {
+        isVerified: true,
+        verifiedBy: userId,
+        status: 'verified',
+      } as Partial<IIssue>);
+      await this.timelineRepo.create({
+        issueId,
+        type: 'updated',
+        description: `Community verification complete — 3 nearby residents confirmed this issue.`,
+        actor: 'community',
+        actorName: 'Community Verification',
+      } as Omit<ITimelineEvent, 'id' | 'createdAt' | 'updatedAt'>);
     }
   }
 

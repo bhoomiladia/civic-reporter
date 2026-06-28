@@ -4,7 +4,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { formatTimeAgo } from "@/lib/utils";
 import { CategoryIcon, StatusBadge } from "@/components/shared/status-badge";
-import { ArrowUp, MessageCircle, MapPin } from "lucide-react";
+import { ArrowUp, MessageCircle, MapPin, CheckCircle2, Clock } from "lucide-react";
 import type { Issue } from "@/lib/types";
 
 interface IssueCardProps {
@@ -14,6 +14,8 @@ interface IssueCardProps {
 }
 
 export function IssueCard({ issue, compact = false, className }: IssueCardProps) {
+  const isUnverified = issue.status === 'reported' || issue.status === 'verification';
+
   return (
     <Link
       href={`/issues/${issue.id}`}
@@ -42,7 +44,21 @@ export function IssueCard({ issue, compact = false, className }: IssueCardProps)
             >
               {issue.title}
             </h3>
-            <StatusBadge status={issue.status} />
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Verification badge */}
+              {isUnverified ? (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-[10px] font-bold text-amber-700">
+                  <Clock size={10} />
+                  Pending
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-50 border border-green-200 text-[10px] font-bold text-green-700">
+                  <CheckCircle2 size={10} />
+                  Verified
+                </span>
+              )}
+              <StatusBadge status={issue.status} />
+            </div>
           </div>
 
           {/* Description preview */}

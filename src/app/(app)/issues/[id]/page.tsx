@@ -348,28 +348,110 @@ export default function IssueDetailPage({
                   <div>
                     <h4 className="text-small font-bold text-slate-800">Community Verification</h4>
                     
-                    {/* Verification widget details */}
-                    <div className="mt-2 bg-slate-50 rounded-xl p-3.5 border border-slate-100 max-w-md">
-                      <div className="flex items-center justify-between text-xs font-semibold text-slate-600 mb-1.5">
-                        <span>Consensus Score</span>
-                        <span>{Math.min(((issue.upvotes || 0) / 3) * 100, 100)}%</span>
+                    {/* Enhanced Verification Widget */}
+                    <div className="mt-2 rounded-xl border max-w-md overflow-hidden">
+                      {/* Header */}
+                      <div className={cn(
+                        "px-4 py-3 flex items-center gap-2",
+                        (issue.verificationCount || 0) >= 3
+                          ? "bg-green-50 border-b border-green-100"
+                          : "bg-slate-50 border-b border-slate-100"
+                      )}>
+                        {(issue.verificationCount || 0) >= 3 ? (
+                          <>
+                            <div className="w-5 h-5 rounded-full bg-green-600 flex items-center justify-center">
+                              <CheckCircle2 size={12} className="text-white" />
+                            </div>
+                            <span className="text-xs font-bold text-green-700">Verified by 3 Nearby People</span>
+                          </>
+                        ) : (
+                          <>
+                            <div className="w-5 h-5 rounded-full bg-amber-100 flex items-center justify-center">
+                              <Clock size={12} className="text-amber-600" />
+                            </div>
+                            <span className="text-xs font-bold text-slate-600">Awaiting Community Verification</span>
+                          </>
+                        )}
                       </div>
-                      <div className="w-full bg-slate-200/60 rounded-full h-1.5 overflow-hidden">
-                        <div
-                          className="bg-blue-600 h-full rounded-full transition-all duration-500"
-                          style={{ width: `${Math.min(((issue.upvotes || 0) / 3) * 100, 100)}%` }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between mt-2.5">
-                        <span className="text-[11px] text-slate-400">
-                          Neighbor confirmations: {issue.upvotes || 0} / 3 needed
-                        </span>
-                        
-                        {/* Vote/Verify Button */}
-                        {issue.status === "verification" && (
-                          <Button size="sm" onClick={handleVerify} disabled={verifyMutation.isPending}>
-                            Confirm Issue
+
+                      {/* People verification icons */}
+                      <div className="px-4 py-4 bg-white">
+                        <div className="flex items-center justify-center gap-4 mb-4">
+                          {[1, 2, 3].map((personIdx) => {
+                            const isVerified = (issue.verificationCount || 0) >= personIdx;
+                            return (
+                              <div key={personIdx} className="flex flex-col items-center gap-1.5">
+                                <div
+                                  className={cn(
+                                    "w-11 h-11 rounded-full flex items-center justify-center transition-all duration-500",
+                                    isVerified
+                                      ? "bg-green-100 text-green-600 ring-2 ring-green-200 scale-105"
+                                      : "bg-slate-100 text-slate-300 border-2 border-dashed border-slate-200"
+                                  )}
+                                >
+                                  {isVerified ? (
+                                    <CheckCircle2 size={20} className="drop-shadow-sm" />
+                                  ) : (
+                                    <User size={18} />
+                                  )}
+                                </div>
+                                <span className={cn(
+                                  "text-[10px] font-bold",
+                                  isVerified ? "text-green-600" : "text-slate-400"
+                                )}>
+                                  {isVerified ? "Confirmed" : `Person ${personIdx}`}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Progress bar */}
+                        <div className="mb-3">
+                          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mb-1">
+                            <span>Verification Progress</span>
+                            <span className={cn(
+                              (issue.verificationCount || 0) >= 3 ? "text-green-600" : "text-blue-600"
+                            )}>
+                              {Math.min(issue.verificationCount || 0, 3)} / 3
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all duration-700 ease-out",
+                                (issue.verificationCount || 0) >= 3 ? "bg-green-500" : "bg-blue-500"
+                              )}
+                              style={{ width: `${Math.min(((issue.verificationCount || 0) / 3) * 100, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Verify Button (mock: same user can click multiple times) */}
+                        {(issue.verificationCount || 0) < 3 && (
+                          <Button
+                            size="sm"
+                            onClick={handleVerify}
+                            disabled={verifyMutation.isPending}
+                            className="w-full font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                          >
+                            {verifyMutation.isPending ? (
+                              <Loader2 size={14} className="animate-spin mr-1.5" />
+                            ) : (
+                              <ThumbsUp size={14} className="mr-1.5" />
+                            )}
+                            Verify This Issue ({Math.min(issue.verificationCount || 0, 3)}/3)
                           </Button>
+                        )}
+
+                        {/* Celebration when fully verified */}
+                        {(issue.verificationCount || 0) >= 3 && (
+                          <div className="bg-green-50 border border-green-100 rounded-lg py-2.5 px-3 text-center">
+                            <span className="text-xs font-bold text-green-700 flex items-center justify-center gap-1.5">
+                              <Award size={14} className="text-green-600" />
+                              Issue now visible on the public map!
+                            </span>
+                          </div>
                         )}
                       </div>
                     </div>

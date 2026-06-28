@@ -29,6 +29,11 @@ export default function MapPage() {
 
   const issuesList = response?.data || [];
 
+  // Only show verified issues on the map (past the verification stage)
+  const verifiedIssuesForMap = issuesList.filter(
+    (issue: any) => issue.status !== 'reported' && issue.status !== 'verification'
+  );
+
   const toggleCategory = (cat: IssueCategory) => {
     setSelectedCategories((prev) =>
       prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
@@ -40,7 +45,7 @@ export default function MapPage() {
       {/* Map */}
       <div className="absolute inset-0">
         <LiveMapWrapper
-          issuesList={issuesList}
+          issuesList={verifiedIssuesForMap}
           onPinClick={setSelectedIssue}
           selectedIssueId={selectedIssue?.id}
         />

@@ -81,6 +81,7 @@ export function useVerifyIssue(id: string) {
     mutationFn: () => issuesApi.verifyIssue(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['issue', id] });
+      queryClient.invalidateQueries({ queryKey: ['issues'] });
     },
   });
 }
