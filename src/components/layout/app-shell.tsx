@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { Sidebar } from "./sidebar";
 import { BottomNav } from "./bottom-nav";
 import { Loader2 } from "lucide-react";
+import { AIAssistant } from "@/components/shared/ai-assistant";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -38,6 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <BottomNav />
       <main className="lg:ml-[120px] pb-16 lg:pb-0">{children}</main>
+      <AIAssistant />
     </div>
   );
 }

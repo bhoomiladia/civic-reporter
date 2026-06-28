@@ -180,6 +180,7 @@ export class IssueService {
   private timelineRepo = new TimelineEventRepository();
   private commentRepo = new CommentRepository();
   private voteRepo = new VoteRepository();
+  private notifRepo = new NotificationRepository();
 
   async createIssue(userId: string, data: IIssueCreate): Promise<IIssue> {
     const user = await this.userRepo.findById(userId);
@@ -260,6 +261,18 @@ export class IssueService {
 
       if (data.status === 'resolved' && issue.reportedBy) {
         await this.userRepo.incrementIssueCount(issue.reportedBy, 'issuesResolved');
+      }
+
+      // Send status change notification to reporter
+      if (issue.reportedBy) {
+        await this.notifRepo.create({
+          userId: issue.reportedBy,
+          type: 'status_update',
+          title: '📋 Issue status updated',
+          body: `Your report "${issue.title}" has been moved to status: ${data.status.replace('_', ' ').toUpperCase()}`,
+          isRead: false,
+          issueId,
+        } as any).catch(err => console.error('[Notification Error]', err));
       }
     }
 
@@ -343,6 +356,20 @@ export class IssueService {
     if (!issue) throw AppError.notFound('Issue');
     await this.issueRepo.incrementVerificationCount(issueId);
     const newCount = (issue.verificationCount || 0) + 1;
+
+    // Notify the reporter that a neighbor confirmed their issue
+    if (issue.reportedBy) {
+      await this.notifRepo.create({
+        userId: issue.reportedBy,
+        type: 'vote',
+        title: 'Neighbors confirmed your report',
+        body: `A neighbor verified your report: "${issue.title}". (${newCount}/3 confirmed)`,
+        isRead: false,
+        issueId,
+        senderId: userId,
+      } as any).catch(err => console.error('[Notification Error]', err));
+    }
+
     if (newCount >= 3 && !issue.isVerified) {
       // Community verification threshold reached — mark verified and advance status
       await this.issueRepo.update(issueId, {
@@ -357,6 +384,18 @@ export class IssueService {
         actor: 'community',
         actorName: 'Community Verification',
       } as Omit<ITimelineEvent, 'id' | 'createdAt' | 'updatedAt'>);
+
+      // Send verification complete notification
+      if (issue.reportedBy) {
+        await this.notifRepo.create({
+          userId: issue.reportedBy,
+          type: 'status_update',
+          title: '🎉 Community verification complete',
+          body: `Your report "${issue.title}" has been verified by 3 nearby residents and is now visible on the public map!`,
+          isRead: false,
+          issueId,
+        } as any).catch(err => console.error('[Notification Error]', err));
+      }
     }
   }
 
@@ -452,6 +491,17 @@ Respond strictly in JSON format as follows: {"verified": boolean, "confidence": 
           actor: 'ai',
           actorName: 'Civic AI (Groq Llama-3.2)',
         } as any);
+
+        if (issue.reportedBy) {
+          await this.notifRepo.create({
+            userId: issue.reportedBy,
+            type: 'status_update',
+            title: '🤖 Civic AI Vision Audit Passed',
+            body: `Civic AI successfully verified the photo for your report "${issue.title}" (${confidence}% confidence).`,
+            isRead: false,
+            issueId,
+          } as any).catch(err => console.error('[Notification Error]', err));
+        }
       } else {
         await this.timelineRepo.create({
           issueId,
@@ -460,6 +510,17 @@ Respond strictly in JSON format as follows: {"verified": boolean, "confidence": 
           actor: 'ai',
           actorName: 'Civic AI (Groq Llama-3.2)',
         } as any);
+
+        if (issue.reportedBy) {
+          await this.notifRepo.create({
+            userId: issue.reportedBy,
+            type: 'status_update',
+            title: '⚠️ Civic AI Vision Audit Failed',
+            body: `Civic AI vision audit failed for "${issue.title}". Community verifications will still apply.`,
+            isRead: false,
+            issueId,
+          } as any).catch(err => console.error('[Notification Error]', err));
+        }
       }
 
     } catch (err) {
@@ -495,6 +556,20 @@ export class CommentService {
       issueId: data.issueId, type: 'comment_added',
       description: `${user.name} commented`, actor: userId, actorName: user.name,
     } as Omit<ITimelineEvent, 'id' | 'createdAt' | 'updatedAt'>);
+
+    // Notify the reporter if another user leaves a comment
+    if (issue.reportedBy && issue.reportedBy !== userId) {
+      const notifRepo = new NotificationRepository();
+      await notifRepo.create({
+        userId: issue.reportedBy,
+        type: 'comment',
+        title: '💬 New comment on your report',
+        body: `${user.name} commented on "${issue.title}": "${data.content.slice(0, 45)}..."`,
+        isRead: false,
+        issueId: data.issueId,
+        senderId: userId,
+      } as any).catch(err => console.error('[Notification Error]', err));
+    }
 
     return comment;
   }
